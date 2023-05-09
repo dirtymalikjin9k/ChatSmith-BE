@@ -1,0 +1,88 @@
+.chat-wrap {
+    width: 320px;
+    overflow: scroll;
+    border: 10px;
+    box-shadow: 0 0 66px 3px rgba(15, 15, 18, 0.24);
+    border-radius: 10px;
+    position: relative;
+    position: fixed;
+    background-color: #fafafa;
+    top: calc(200px);
+    right: calc(320px);
+}
+
+.chat-wrap-inner {
+    padding: 20px;
+    overflow: scroll;
+    height: 400px;
+    padding-bottom: 50px;
+}
+
+#input {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: 0;
+}
+
+#input .chat-input-wrapper {
+    width: 100%;
+}
+
+#input .chat-input-wrapper input {
+    height: 50px;
+    padding: 0 12px;
+    font-size: 13px;
+    outline: none;
+    border: none;
+    margin: 0;
+    width: calc(100% - 24px);
+}
+
+#input .chat-button-wrapper {
+    margin: 0;
+    padding: 0;
+}
+
+#input .chat-button-wrapper button {
+    height: 50px;
+    border: none;
+    background: #c9f7f4;
+    color: #19b5ae;
+    font-size: 20px;
+    cursor: pointer;
+    margin: 0;
+    padding: 0 12px;
+    font-size: 13px;
+    transition: all 300ms;
+}
+
+#input .chat-button-wrapper button:hover {
+    background: #99e8e4;
+}
+
+.user p {
+    background: #e1f0fe;
+    padding: 10px 10px;
+    border-radius: 100em;
+    font-family: "Helvetica Neue", Helvetica;
+    line-height: 1.2;
+    font-size: 14px;
+    overflow-wrap: break-word;
+}
+
+.chatbot p {
+    background: #f1f5f8;
+    padding: 10px 10px;
+    border-radius: 20px;
+    font-family: "Helvetica Neue", Helvetica;
+    line-height: 1.2;
+    font-size: 14px;
+    overflow-wrap: break-word;
+}

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Construct Page</title>
+</head>
+
+<body>
+    <h1>{{ success_message }}</h1>
+    <ul>
+        {% for title in titles %}
+        <li>{{ title }}</li>
+        {% endfor %}
+    </ul>
+    <form action="/construct_index">
+        <button type="submit">Index Data</button>
+    </form>
+</body>
+
+</html>

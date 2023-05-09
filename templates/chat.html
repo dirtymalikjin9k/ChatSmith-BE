@@ -1,0 +1,36 @@
+<!-- static/chat.html -->
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>My Chat GPT</title>
+    <link rel="stylesheet" href="static/style.css" />
+</head>
+
+<body>
+    <div class="chat-wrap">
+        <div class="chat-wrap-inner">
+            <div id="chat">
+                <div class="chatbot">
+                    <p>I'm {{ bot_name }}. How can I help you today?</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="input">
+            <div class="chat-input-wrapper">
+                <input type="text" id="query" placeholder="Ask a question..." />
+            </div>
+            <div class="chat-button-wrapper">
+                <button id="send" data-bot-id="{{ bot_id }}">
+            <img src="static/assets/send.svg" />
+          </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/chat.js"></script>
+</body>
+
+</html>
