@@ -16,7 +16,7 @@ document.getElementById("send").addEventListener("click", function(event) {
         sendImage.src = "static/assets/typing.svg";
         document.getElementById("query").value = "";
 
-        fetch(`/api/ask?bot_id=${botId}`, {
+        fetch(`/api/chat?bot_id=${botId}`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

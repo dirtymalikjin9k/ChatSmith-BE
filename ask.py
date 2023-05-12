@@ -1,10 +1,11 @@
-from llama_index import SimpleDirectoryReader, GPTVectorStoreIndex, LLMPredictor, PromptHelper, ServiceContext
+from llama_index import SimpleDirectoryReader, GPTVectorStoreIndex, LLMPredictor, PromptHelper, ServiceContext,GPTKeywordTableIndex
 from llama_index.vector_stores import ChromaVectorStore
 from llama_index.storage.storage_context import StorageContext
 from langchain import OpenAI
 import chromadb
 import os
 from urllib.parse import urlparse
+import re
 
 os.environ["OPENAI_API_KEY"] = "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"
 
@@ -21,10 +22,16 @@ def load_index(data_directory):
     print("index=", index)
     return index
 
-def ask_ai(query, data_directory, bot_id):
+async def ask_ai(query, data_directory, user_email, bot_id):
     # index = load_index(data_directory)
 
-    collection_name = f"my_collection_{bot_id}"
+    # set number of output tokens
+    num_outputs = 1000
+    
+    # define LLM
+    llm_predictor = LLMPredictor(llm=OpenAI(temperature=0.5, model_name="text-davinci-003", max_tokens=num_outputs))
+
+    collection_name = f"my_collection_{user_email}_{bot_id}"
     chroma_collection = chroma_client.get_or_create_collection(collection_name)
     
     # print(chroma_collection.peek())
@@ -32,27 +39,33 @@ def ask_ai(query, data_directory, bot_id):
 
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
+    service_context = ServiceContext.from_defaults(llm_predictor=llm_predictor)
+
 
     documents = SimpleDirectoryReader(data_directory).load_data()
 
     print(chroma_collection.count())
-    index = GPTVectorStoreIndex.from_documents(documents, storage_context=storage_context)
+    index = GPTVectorStoreIndex.from_documents(documents, storage_context=storage_context, service_context=service_context)
     # index.storage_context.persist(f"{data_directory}/index.json")
     prompt = "Your name is Arti and you are a very enthusiastic representative of the following website information who loves to help people! You are a live chat ai on this website and people are communicating with you there. Given the following sections of the website, answer the question using only that information and provide a link at the end of your response to a page when it's appropriate. Limit your responses to 50 words. If the topic is unrealted, respond with 'I'm not sure. Can you be more specifc or ask me in a different way?'"
     query_engine = index.as_query_engine(chroma_collection=chroma_collection)
     response = query_engine.query(prompt + query)
-    print("response = ",response)
+    print("response = ",response.response)
+    text = response.response
     # Check if the response contains a link
-    link_start = response.response.find("http")
-    if link_start != -1:
-        link_end = response.response.find(" ", link_start)
-        if link_end == -1:
-            link_end = len(response.response)
-        link = response.response[link_start:link_end]
-        parsed_link = urlparse(link)
+    url_pattern = re.compile(r"(?P<url>https?://[^\s]+)")
 
-        # Wrap the link in <a> tags if it has a valid scheme and netloc
-        if parsed_link.scheme and parsed_link.netloc:
-            response.response = response.response[:link_start] + f"<a href='{link}'>{link}</a>" + response.response[link_end:]
-    
-    return response.response
+    # replace URLs with anchor tags in the text
+    html_text = url_pattern.sub(r"<a href='\g<url>' target='_blank' style='color: #0000FF'>\g<url></a>", text)
+
+    # return the converted text with HTML anchor tags
+    return html_text
+
+
+def delete_collection(user_email, bot_id):
+    try:
+        collection_name = f"my_collection_{user_email}_{bot_id}"
+        chroma_client.delete_collection(name=collection_name)
+        return "ok"
+    except:
+        return "ok"
