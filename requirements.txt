@@ -1,5 +1,6 @@
-llama_index==0.1.0
-langchain==0.1.0
-requests==2.26.0
-beautifulsoup4==4.9.3
-Flask==2.0.2
+Flask==2.2.2
+Flask-Cors==3.0.10
+psycopg2==2.9.5
+langchain==0.0.161
+chromadb==0.3.21
+psycopg2==2.9.5

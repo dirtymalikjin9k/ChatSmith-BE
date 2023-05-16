@@ -4,13 +4,16 @@ from urllib.parse import urljoin
 import os
 import time
 import hashlib
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory
 from flask_cors import CORS
 from ask import ask_ai, delete_collection
 from psycopg2 import connect, extras
 from os import environ
+import json
+import shutil
 
-app = Flask(__name__)
+
+app = Flask(__name__, static_folder='build')
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 os.makedirs("data", exist_ok=True)
 
@@ -45,7 +48,6 @@ def index():
     scrape_urls(urls, root_url, user_email, bot_id)
     return "Ok"
 
-
 @app.post('/api/getChatIdsByEmail')
 def getChatIdsByEmail():
     try:
@@ -57,7 +59,6 @@ def getChatIdsByEmail():
         return filenames
     except:
         return {}
-
 
 @app.post('/api/getTextNamesByEmailAndId')
 def getTextNamesByEmailAndId():
@@ -71,7 +72,6 @@ def getTextNamesByEmailAndId():
         return filenames
     except:
         return {}
-
 
 @app.post('/api/getTextContentByEmailAndIdAndTextName')
 def getTextContentByEmailAndIdAndTextName():
@@ -88,7 +88,6 @@ def getTextContentByEmailAndIdAndTextName():
         return content
     except:
         return {}
-
 
 @app.post('/api/uploadTextByEmailAndId')
 def uploadTextByEmailAndId():
@@ -115,9 +114,10 @@ def uploadTextByEmailAndId():
     except:
         return {}
 
-
 def scrape_urls(urls, root_url, user_email, bot_id):
-    data_directory = f"data/{user_email}/{bot_id}"
+    user_email_hash = create_hash(user_email)
+    print(user_email_hash)
+    data_directory = f"data/{user_email_hash}/{bot_id}"
     os.makedirs(data_directory, exist_ok=True)
     unique_content = set()
     unique_urls = set()
@@ -184,25 +184,26 @@ def scrape_urls(urls, root_url, user_email, bot_id):
                     f.write(f"{url}\n")
             f.write("\n")
 
-
 @app.post('/api/chat')
 async def api_ask():
     requestInfo = request.get_json()
     print(requestInfo)
     user_email = requestInfo['user_email']
     bot_id = requestInfo['bot_id']
-
-    data_directory = f"data//{user_email}//{bot_id}"
+    
+    user_email_hash = create_hash(user_email)
+    print(user_email_hash)
+    data_directory = f"data//{user_email_hash}//{bot_id}"
 
     query = request.json['message_text']
     print("query=", query)
     print("bot_id=", bot_id)
+    print('data_directory = ', data_directory)
     response = await ask_ai(query, data_directory, user_email, bot_id)
     app.logger.debug(f"Query: {query}")
     app.logger.debug(f"Response: {response}")
     print("response:", response)
     return jsonify({'response': response})
-
 
 @app.post('/api/chatsDelete')
 def api_chats_delte():
@@ -212,6 +213,31 @@ def api_chats_delte():
     bot_id = requestInfo['bot_id']
     response = delete_collection(user_email, bot_id)
     return response
+
+@app.post('/api/botDelete')
+def api_bot_delete():
+    requestInfo = request.get_json()
+    print(requestInfo)
+    email = requestInfo['user_email']
+    bot_id = requestInfo['bot_id']
+    if email == '' or bot_id == '':
+        return {}
+    else:
+        try:
+            connection = get_connection()
+            cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+            cursor.execute('DELETE FROM chats WHERE email = %s AND bot_id = %s',
+                                (email, bot_id))            
+            connection.commit()
+            cursor.close()
+            connection.close()
+            user_email_hash = create_hash(email)
+            data_directory = f"data/{user_email_hash}/{bot_id}"
+            shutil.rmtree(data_directory)
+            return "ok"
+        except Exception as e:
+            print('Error: ' + str(e))
+
 
 @app.post('/api/auth/register')
 def api_auth_register():
@@ -267,12 +293,120 @@ def api_auth_login():
             if user is None:
                 print(user)
                 return jsonify({'message': 'Email or Password does not correct'}), 404
-            return "Login Success"
+            return user
         except:
             return jsonify({'message': 'Email or Password does not correct'}), 404
 
+@app.post('/api/newChat')
+def api_newChat():
+    requestInfo = request.get_json()
+    email = requestInfo['user_email']
+    chat_name = requestInfo['chat_name']
+    prompt = requestInfo['prompt']
+    bot_id = requestInfo['bot_id']
+    urls_input = requestInfo['urls_input']
+    chats = [{
+        "question": "",
+        "answer": ""
+    }]
+
+    # Extract the root URL from the first URL
+
+    if email == '' or prompt == '' or bot_id == '' or urls_input== '' :
+        return {}
+    else:
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        try:
+            chats_str = json.dumps(chats)
+            cursor.execute('INSERT INTO chats (email, chat_name, prompt, urls, bot_id, chats) VALUES (%s, %s, %s, %s, %s, %s) RETURNING *',
+                        (email, chat_name, prompt, urls_input, bot_id, chats_str))
+            new_created_chat = cursor.fetchone()
+            print(new_created_chat)
+            
+            connection.commit()
+            cursor.close()
+            connection.close()
+            urls = [url.strip() for url in urls_input.split(",")]
+            root_url = urljoin(urls[0], "/")
+            scrape_urls(urls, root_url, email, bot_id)
+            return "ok"
+        except Exception as e:
+            print('Error: '+ str(e))
+            return "can not save new chats" 
+
+@app.post('/api/updateChat')
+def api_updateChat():
+    requestInfo = request.get_json()
+    email = requestInfo['user_email']
+    chat_name = requestInfo['chat_name']
+    prompt = requestInfo['prompt']
+    bot_id = requestInfo['bot_id']
+    urls_input = requestInfo['urls_input']
+    custom_text = requestInfo['custom_text']
+    if email == '' or prompt == '' or bot_id == '' or urls_input== '' :
+        return {}
+    else:
+        user_email_hash = create_hash(email)
+        print(user_email_hash)
+        data_directory = f"data/{user_email_hash}/{bot_id}"
+        shutil.rmtree(data_directory)
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        try:
+            cursor.execute("UPDATE chats SET chat_name = %s, prompt = %s, urls = %s, custom_text = %s WHERE email = %s AND bot_id = %s",
+                    (chat_name, prompt, urls_input, custom_text, email, bot_id))
+            
+            connection.commit()
+            cursor.close()
+            connection.close()
+            urls = [url.strip() for url in urls_input.split(",")]
+            root_url = urljoin(urls[0], "/")
+            scrape_urls(urls, root_url, email, bot_id)
+            if custom_text != "":
+                filename = f"{data_directory}/custom_text.txt"
+                with open(filename, "w") as file:
+                    file.write(custom_text)
+            return "ok"
+        except Exception as e:
+            print('Error: '+ str(e))
+            return "can not save new chats" 
+
+@app.post('/api/getChatInfos')
+def api_getChatInfos():
+    requestInfo = request.get_json()
+    email = requestInfo['user_email']
+    print("email = ",email)
+    if email == "":
+        return jsonify({'message': 'email does not exist'}), 404
+    else: 
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+
+        try:
+            cursor.execute('SELECT * FROM chats WHERE email = %s ', (email,))
+            chats = cursor.fetchall()
+
+            connection.commit()
+            cursor.close()
+            connection.close()
+            return chats
+        except Exception as e:
+            print('Error: '+ str(e))
+            return jsonify({'message': 'chat does not exist'}), 404
+    
+
 def create_hash(text):
     return hashlib.md5(text.encode()).hexdigest()
+
+# Serve REACT static files
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve(path):
+    if path != "" and os.path.exists(app.static_folder + '/' + path):
+        return send_from_directory(app.static_folder, path)
+    else:
+        return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == "__main__":
     app.run(debug=True, threaded=True)

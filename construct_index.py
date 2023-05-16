@@ -4,8 +4,9 @@ from llama_index.storage.storage_context import StorageContext
 from langchain import OpenAI
 import os
 import chromadb
+from os import environ
 
-os.environ["OPENAI_API_KEY"] = "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"
+os.environ["OPENAI_API_KEY"] = environ.get('OPENAI_API_KEY')
 
 def construct_index(data_directory):
 
