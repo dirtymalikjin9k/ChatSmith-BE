@@ -148,7 +148,6 @@ def scrape_urls(urls, root_url, user_email, bot_id):
             page = requests.get(url)
             soup = BeautifulSoup(page.content, "html.parser")
             title = soup.title.string
-            print(title)
             # # Remove script and style tags
             for script in soup(["script", "style"]):
                 script.extract()
@@ -171,17 +170,19 @@ def scrape_urls(urls, root_url, user_email, bot_id):
                 "http") else url for url in urls_on_page]
 
             # Get the path of the URL 
-            path = urljoin(root_url, url).replace(root_url, "").strip("/")
+            print("root = ",root_url)
+            print("url = ",url + '/')
+            path = urljoin(root_url, url + '/').replace(root_url, "").strip("/")
+            print("path = ", path)
             if path == "":
                 path = "index"
             else:
                 # Replace slashes with hyphens
                 path = path.replace("/", "-")
-
             # Create the directory if it doesn't exist
             dirs = os.path.dirname(f"{data_directory}/{path}.txt")
             os.makedirs(dirs, exist_ok=True)
-
+            
             # # Write the page content and URLs to a file
             with open(f"{data_directory}/{path}.txt", "w") as f:
                 f.write(f"{title}: {url}\n")
@@ -189,7 +190,6 @@ def scrape_urls(urls, root_url, user_email, bot_id):
                 # time.sleep(5)
                 for line in content:
                     try:
-                        print(line)
                         if line not in unique_content:
                             unique_content.add(line)
                             f.write(line + "\n")
