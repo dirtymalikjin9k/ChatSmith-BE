@@ -67,7 +67,7 @@ async def ask_ai(query, data_directory, user_email, bot_id):
 
         # define LLM
         llm_predictor = LLMPredictor(llm=OpenAI(
-            temperature=0.5, model_name="text-davinci-003", max_tokens=num_outputs))
+            temperature=0.7, model_name="text-davinci-003", max_tokens=num_outputs))
 
         user_email_hash = create_hash(user_email)
         collection_name = f"collection_{user_email_hash}_{bot_id}"
@@ -131,7 +131,7 @@ def create_hash(text):
     return hashlib.md5(text.encode()).hexdigest()
 
 
-def delete_collection(user_email, bot_id):
+def delete_data_collection(user_email, bot_id):
     try:
         chats = [{
             "question": "",
@@ -148,6 +148,26 @@ def delete_collection(user_email, bot_id):
         connection.close()
         collection_name = f"my_collection_{create_hash(user_email)}_{bot_id}"
         chroma_client.delete_collection(name=collection_name)
+        return "ok"
+    except:
+        return "cant delete"
+    
+def delete_collection(user_email, connection, cursor):
+    try:
+        
+        cursor.execute("SELECT * FROM chats WHERE email = %s ",
+                    (user_email,))
+        chats = cursor.fetchall()
+        connection.commit()
+        
+        if(len(chats) > 0):
+            for chat in chats:
+                collection_name = f"my_collection_{create_hash(user_email)}_{chat['bot_id']}"
+                # chroma_client.delete_collection(name=collection_name)
+
+        cursor.execute('DELETE FROM chats WHERE email = %s',
+                                (user_email,))
+        connection.commit()
         return "ok"
     except:
         return "cant delete"
