@@ -1,6 +1,6 @@
 Flask==2.2.2
 Flask-Cors==3.0.10
 psycopg2==2.9.5
-langchain==0.0.176
+langchain==0.0.17
 chromadb==0.3.21
 psycopg2==2.9.5
