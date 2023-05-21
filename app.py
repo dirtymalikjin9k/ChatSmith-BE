@@ -142,64 +142,67 @@ def scrape_urls(urls, root_url, user_email, bot_id):
     print(urls)
 
     for url in urls:
-        time.sleep(5)
-        print(url)
-        page = requests.get(url)
-        soup = BeautifulSoup(page.content, "html.parser")
-        title = soup.title.string
-        print(title)
-        # # Remove script and style tags
-        for script in soup(["script", "style"]):
-            script.extract()
+        try:
+            time.sleep(5)
+            print(url)
+            page = requests.get(url)
+            soup = BeautifulSoup(page.content, "html.parser")
+            title = soup.title.string
+            print(title)
+            # # Remove script and style tags
+            for script in soup(["script", "style"]):
+                script.extract()
 
-        # # Remove spans with empty content
-        for span in soup.find_all("span"):
-            if span.text.strip() == "":
-                span.decompose()
+            # # Remove spans with empty content
+            for span in soup.find_all("span"):
+                if span.text.strip() == "":
+                    span.decompose()
 
-        # Get the page content
-        content = [elem.get_text().strip() for elem in soup.find_all(
-            ['p', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])]
+            # Get the page content
+            content = [elem.get_text().strip() for elem in soup.find_all(
+                ['p', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])]
 
-        # Get all the URLs on the page
-        urls_on_page = [link.get('href') for link in soup.find_all('a')]
-        urls_on_page = [url for url in urls_on_page if url is not None]
+            # Get all the URLs on the page
+            urls_on_page = [link.get('href') for link in soup.find_all('a')]
+            urls_on_page = [url for url in urls_on_page if url is not None]
 
-        # Prepend the root URL to relative URLs
-        urls_on_page = [urljoin(root_url, url) if not url.startswith(
-            "http") else url for url in urls_on_page]
+            # Prepend the root URL to relative URLs
+            urls_on_page = [urljoin(root_url, url) if not url.startswith(
+                "http") else url for url in urls_on_page]
 
-        # Get the path of the URL 
-        path = urljoin(root_url, url).replace(root_url, "").strip("/")
-        if path == "":
-            path = "index"
-        else:
-            # Replace slashes with hyphens
-            path = path.replace("/", "-")
+            # Get the path of the URL 
+            path = urljoin(root_url, url).replace(root_url, "").strip("/")
+            if path == "":
+                path = "index"
+            else:
+                # Replace slashes with hyphens
+                path = path.replace("/", "-")
 
-        # Create the directory if it doesn't exist
-        dirs = os.path.dirname(f"{data_directory}/{path}.txt")
-        os.makedirs(dirs, exist_ok=True)
+            # Create the directory if it doesn't exist
+            dirs = os.path.dirname(f"{data_directory}/{path}.txt")
+            os.makedirs(dirs, exist_ok=True)
 
-        # # Write the page content and URLs to a file
-        with open(f"{data_directory}/{path}.txt", "w") as f:
-            f.write(f"{title}: {url}\n")
-            print("content:", content)
-            # time.sleep(5)
-            for line in content:
-                try:
-                    print(line)
-                    if line not in unique_content:
-                        unique_content.add(line)
-                        f.write(line + "\n")
-                except:
-                    print("error")
-            f.write("URLs:\n")
-            for url in urls_on_page:
-                if url not in unique_urls:
-                    unique_urls.add(url)
-                    f.write(f"{url}\n")
-            f.write("\n")
+            # # Write the page content and URLs to a file
+            with open(f"{data_directory}/{path}.txt", "w") as f:
+                f.write(f"{title}: {url}\n")
+                print("content:", content)
+                # time.sleep(5)
+                for line in content:
+                    try:
+                        print(line)
+                        if line not in unique_content:
+                            unique_content.add(line)
+                            f.write(line + "\n")
+                    except:
+                        print("error")
+                f.write("URLs:\n")
+                for url in urls_on_page:
+                    if url not in unique_urls:
+                        unique_urls.add(url)
+                        f.write(f"{url}\n")
+                f.write("\n")
+        except:
+            return 
 
 @app.post('/api/chat')
 async def api_ask():
