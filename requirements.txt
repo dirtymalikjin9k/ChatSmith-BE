@@ -1,7 +1,6 @@
 bs4==0.0.1
 Flask==2.2.2
 Flask-Cors==3.0.10
-psycopg2==2.9.5
 langchain==0.0.176
 chromadb==0.3.21
 llama-index==0.6.1
