@@ -11,6 +11,9 @@ import re
 from os import environ
 import hashlib
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 os.environ["OPENAI_API_KEY"] = environ.get('OPENAI_API_KEY')
 
