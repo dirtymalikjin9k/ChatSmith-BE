@@ -590,6 +590,7 @@ def serve(path):
     if path != "" and os.path.exists(app.static_folder + '/' + path):
         return send_from_directory(app.static_folder, path)
     else:
+        print(app.static_folder)
         return send_from_directory(app.static_folder, 'index.html')
 
 
