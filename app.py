@@ -4,7 +4,7 @@ from urllib.parse import urljoin
 import os
 import time
 import hashlib
-from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory, make_response
 from flask_cors import CORS
 from ask import ask_ai, delete_data_collection, delete_collection
 import psycopg2
@@ -314,7 +314,11 @@ def api_auth_login():
             if user is None:
                 print(user)
                 return jsonify({'message': 'Email or Password does not correct'}), 404
-            return user, 200, {'Content-Type': 'application/json'}
+            
+            response = make_response(jsonify(user))
+            response.headers['Content-Type'] = 'text/plain'
+            response.status_code = 200
+            return response
         except:
             return jsonify({'message': 'Email or Password does not correct'}), 404
 
