@@ -442,7 +442,7 @@ def api_getChatInfos():
             cursor.close()
             connection.close()
             if len(chats) > 0:
-                return chats
+                return jsonify({'data': chats})
             else:
                 return jsonify({'message': 'chat does not exist'}), 404 
         except Exception as e:
