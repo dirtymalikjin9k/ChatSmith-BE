@@ -17,7 +17,7 @@ from dateutil.relativedelta import relativedelta
 
 
 app = Flask(__name__, static_folder='build')
-CORS(app, resources={r"/api/*": {"origins": "https://1a78-65-109-52-221.ngrok-free.app/"}})
+# CORS(app, resources={r"/api/*": {"origins": "https://1a78-65-109-52-221.ngrok-free.app/"}})
 
 os.makedirs("data", exist_ok=True)
 
@@ -64,72 +64,6 @@ def index():
 
     scrape_urls(urls, root_url, user_email, bot_id)
     return "Ok"
-
-@app.post('/api/getChatIdsByEmail')
-def getChatIdsByEmail():
-    try:
-        requestInfo = request.get_json()
-        user_email = requestInfo['user_email']
-        data_directory = f"data/{user_email}"
-        filenames = os.listdir(data_directory)
-        print(filenames)
-        return filenames
-    except:
-        return {}
-
-@app.post('/api/getTextNamesByEmailAndId')
-def getTextNamesByEmailAndId():
-    try:
-        requestInfo = request.get_json()
-        user_email = requestInfo['user_email']
-        id = requestInfo['id']
-        data_directory = f"data/{user_email}/{id}"
-        filenames = os.listdir(data_directory)
-        print(filenames)
-        return filenames
-    except:
-        return {}
-
-@app.post('/api/getTextContentByEmailAndIdAndTextName')
-def getTextContentByEmailAndIdAndTextName():
-    try:
-        requestInfo = request.get_json()
-        user_email = requestInfo['user_email']
-        id = requestInfo['id']
-        text_name = requestInfo['text_name']
-        data_directory = f"data/{user_email}/{id}/{text_name}"
-        with open(data_directory) as file:
-            content = file.read()
-
-        print(content)
-        return content
-    except:
-        return {}
-
-@app.post('/api/uploadTextByEmailAndId')
-def uploadTextByEmailAndId():
-    try:
-        requestInfo = request.get_json()
-        user_email = requestInfo['user_email']
-        id = requestInfo['id']
-        text_name = requestInfo['text_name']
-        text_content = requestInfo['text_content']
-        data_directory = f"data/{user_email}/{id}"
-
-        dirs = os.path.dirname(f"{data_directory}/{text_name}.txt")
-        os.makedirs(dirs, exist_ok=True)
-
-        with open(f"{data_directory}/{text_name}.txt", "w") as f:
-            # time.sleep(5)
-            for line in text_content:
-                try:
-                    print(line)
-                    f.write(line + "\n")
-                except:
-                    print("error")
-            f.write("\n")
-    except:
-        return {}
 
 def scrape_urls(urls, root_url, user_email, bot_id):
     user_email_hash = create_hash(user_email)
@@ -442,7 +376,7 @@ def api_getChatInfos():
             cursor.close()
             connection.close()
             if len(chats) > 0:
-                return jsonify({'data': chats})
+                return jsonify({'chats': chats})
             else:
                 return jsonify({'message': 'chat does not exist'}), 404 
         except Exception as e:
