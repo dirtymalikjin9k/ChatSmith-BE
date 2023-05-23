@@ -25,7 +25,7 @@ stripe.api_key = 'pk_test_51N8ikXCRd8rWbf0guJ5xqIR6c1Ya13PexdGenYTrru60C7nVLWrLx
 
 
 # endpoint_secret = 'whsec_ef236d754b0c2badbd37c064994eddfa7a630c790b8407b1395cd8727f4fee6a'
-endpoint_secret = 'whsec_Mxa8Ge5Ark73iJxU3FYXWQ4vysrnVA8Z'
+endpoint_secret = 'whsec_aL0kutS9p1MkhhKXN8GkTnHoz7WnPXfj'
 
 all_urls = set()
 
