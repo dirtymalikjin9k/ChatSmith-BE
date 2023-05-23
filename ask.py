@@ -5,7 +5,7 @@ from langchain import OpenAI
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 import chromadb
 import os
-from psycopg2 import connect, extras
+import psycopg2
 from urllib.parse import urlparse
 import re
 from os import environ
@@ -27,7 +27,7 @@ password = environ.get('DB_PASSWORD')
 
 
 def get_connection():
-    conection = connect(host=host,
+    conection = psycopg2.connect(host=host,
                         port=port,
                         dbname=dbname,
                         user=user,
@@ -52,7 +52,7 @@ async def ask_ai(query, data_directory, user_email, bot_id):
     # index = load_index(data_directory)
     try:
         connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor = connection.cursor()
 
         cursor.execute(
             'SELECT * FROM chats WHERE email = %s AND bot_id = %s ', (user_email, bot_id,))
@@ -110,7 +110,7 @@ async def ask_ai(query, data_directory, user_email, bot_id):
             "answer": html_text
         }
         connection = get_connection()
-        cur = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cur = connection.cursor()
         cur.execute(
             'SELECT * FROM chats WHERE email = %s AND bot_id = %s', (user_email, bot_id))
         chat = cur.fetchone()
@@ -143,7 +143,7 @@ def delete_data_collection(user_email, bot_id):
         chats_str = json.dumps(chats)
         print(chats_str)
         connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)        
+        cursor = connection.cursor()        
         cursor.execute("UPDATE chats SET chats = %s WHERE email = %s AND bot_id = %s",
                     (chats_str, user_email, bot_id))
         connection.commit()

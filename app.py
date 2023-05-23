@@ -7,7 +7,7 @@ import hashlib
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory
 from flask_cors import CORS
 from ask import ask_ai, delete_data_collection, delete_collection
-from psycopg2 import connect, extras
+import psycopg2
 from os import environ
 import json
 import shutil
@@ -36,7 +36,7 @@ user = environ.get('DB_USER')
 password = environ.get('DB_PASSWORD')
 
 def get_connection():
-    conection = connect(host=host,
+    conection = psycopg2.connect(host=host,
                         port=port,
                         dbname=dbname,
                         user=user,
@@ -245,7 +245,7 @@ def api_bot_delete():
     else:
         try:
             connection = get_connection()
-            cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+            cursor = connection.cursor()
             cursor.execute('DELETE FROM chats WHERE email = %s AND bot_id = %s',
                                 (email, bot_id))            
             connection.commit()
@@ -270,7 +270,7 @@ def api_auth_register():
         return {}
     else:
         connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor = connection.cursor()
 
         try:
             hash_password = create_hash(password)
@@ -297,7 +297,7 @@ def api_auth_login():
         return {}
     else:
         connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor = connection.cursor()
 
         try:
             hash_password = create_hash(password)
@@ -339,7 +339,7 @@ def api_newChat():
         return {}
     else:
         connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor = connection.cursor()
         try:
             chats_str = json.dumps(chats)
             cursor.execute('INSERT INTO chats (email, instance_name, chat_name, prompt, urls, bot_id, chats, complete) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING *',
@@ -397,7 +397,7 @@ def api_updateChat():
         data_directory = f"data/{user_email_hash}/{bot_id}"
         shutil.rmtree(data_directory)
         connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor = connection.cursor()
         try:
             cursor.execute("UPDATE chats SET instance_name = %s, chat_name = %s, prompt = %s, urls = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
                     (instance_name, chat_name, prompt, urls_input, custom_text, 'false', email, bot_id))
@@ -432,7 +432,7 @@ def api_getChatInfos():
         return jsonify({'message': 'email does not exist'}), 404
     else: 
         connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor = connection.cursor()
 
         try:
             cursor.execute('SELECT * FROM chats WHERE email = %s ', (email,))
@@ -478,7 +478,7 @@ def api_webhook():
 
     if charge : 
         connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor = connection.cursor()
 
         email = charge['billing_details']['email']
 
@@ -516,7 +516,7 @@ def api_getSubscription():
         return "ok"
     else:
         connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor = connection.cursor()
         # try:
         cursor.execute('SELECT * FROM subscription WHERE email = %s ', (email,))
 
@@ -565,7 +565,7 @@ def api_unsubscribe():
         data_directory = f"data/{create_hash(email)}"
         shutil.rmtree(data_directory)
         connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor = connection.cursor()
         # try:
         cursor.execute('DELETE FROM subscription WHERE email = %s',
                                 (email,))            
