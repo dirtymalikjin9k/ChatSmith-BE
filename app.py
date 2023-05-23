@@ -314,7 +314,7 @@ def api_auth_login():
             if user is None:
                 print(user)
                 return jsonify({'message': 'Email or Password does not correct'}), 404
-            return user
+            return {user}
         except:
             return jsonify({'message': 'Email or Password does not correct'}), 404
 
