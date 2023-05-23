@@ -305,7 +305,7 @@ def api_auth_login():
             print(email)
             cursor.execute('SELECT * FROM users WHERE email = %s AND password = %s', (email,hash_password))
             user = cursor.fetchone()
-
+            print("----user-----", user)
             connection.commit()
             cursor.close()
             connection.close()
