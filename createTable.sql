@@ -30,13 +30,22 @@ cursor.close()
 connection.close()
 
 query = """
-    CREATE TABLE user_subscription (
+    CREATE TABLE subscription (
         id SERIAL PRIMARY KEY,
         email VARCHAR(150) NOT NULL,
-        customer_id VARCHAR(150) NOT NULL,
         paymentmethod VARCHAR(150) NOT NULL,
+        type VARCHAR(150) NOT NULL,
         start_date VARCHAR(150) NOT NULL,
         end_date VARCHAR(150) NOT NULL,
+        created date DEFAULT CURRENT_TIMESTAMP
+    )
+"""
+
+query = """
+    CREATE TABLE users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(150) NOT NULL,
+        password VARCHAR(150) NOT NULL,
         created date DEFAULT CURRENT_TIMESTAMP
     )
 """
