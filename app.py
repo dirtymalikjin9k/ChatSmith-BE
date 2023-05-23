@@ -437,7 +437,7 @@ def api_getChatInfos():
         try:
             cursor.execute('SELECT * FROM chats WHERE email = %s ', (email,))
             chats = cursor.fetchall()
-
+            print("chats = ", chats)
             connection.commit()
             cursor.close()
             connection.close()
