@@ -387,6 +387,7 @@ def api_getChatInfos():
 def api_webhook():
     event = None
     payload = request.data
+    print("endpoint_secret = ",endpoint_secret)
     if endpoint_secret:
         sig_header = request.headers.get('Stripe-Signature')
         try:
