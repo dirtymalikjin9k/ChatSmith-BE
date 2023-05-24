@@ -347,7 +347,7 @@ def api_updateChat():
                     file.write(custom_text)
             response = delete_data_collection(email, bot_id)
             cursor.execute("UPDATE chats SET instance_name = %s, chat_name = %s, prompt = %s, urls = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
-                    (instance_name, chat_name, prompt, urls_input, custom_text, 'false', email, bot_id))
+                    (instance_name, chat_name, prompt, urls_input, custom_text, 'true', email, bot_id))
 
             cursor.close()
             connection.close()
