@@ -220,6 +220,35 @@ def api_auth_register():
             if new_created_user is None:
                 print(new_created_user)
                 return jsonify({'message': 'Email already exist'}), 404
+            return "ok"
+        except:
+            return jsonify({'message': 'Email already exist'}), 404
+
+@app.post('/api/auth/googleRegister')
+def api_auth_google_register():
+    print('----register----')
+    requestInfo = request.get_json()
+    email = requestInfo['user_email']
+    if email == '':
+        return {}
+    else:
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+
+        try:
+            hash_password = create_hash('rmeosmsdjajslrmeosmsdjajsl')
+            cursor.execute('INSERT INTO users(email,password) VALUES (%s, %s) RETURNING *',
+                        (email, hash_password))
+            new_created_user = cursor.fetchone()
+            print(new_created_user)
+
+            connection.commit()
+            cursor.close()
+            connection.close()
+
+            if new_created_user is None:
+                print(new_created_user)
+                return jsonify({'message': 'Email already exist'}), 404
             return new_created_user
         except:
             return jsonify({'message': 'Email already exist'}), 404
@@ -250,7 +279,7 @@ def api_auth_login():
             if user is None:
                 print(user)
                 return jsonify({'message': 'Email or Password does not correct'}), 404
-            return user
+            return "ok"
         except:
             return jsonify({'message': 'Email or Password does not correct'}), 404
 
