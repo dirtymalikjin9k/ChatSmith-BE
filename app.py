@@ -529,14 +529,7 @@ def api_getSubscription():
             current_time = datetime.datetime.now()
             
             if end_time > current_time:
-                if subscription['type'] == 1:
-                    cursor.close()
-                    connection.close()
-                    return '5'
-                else: 
-                    cursor.close()
-                    connection.close()
-                    return '10'
+                return '10'
             else:
                 cursor.execute('DELETE FROM subscription WHERE email = %s ',
                                 (email, ))            

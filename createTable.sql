@@ -33,7 +33,7 @@ query = """
     CREATE TABLE subscription (
         id SERIAL PRIMARY KEY,
         email VARCHAR(150) NOT NULL,
-        paymentmethod VARCHAR(150) NOT NULL,
+        customer_id VARCHAR(150) NOT NULL,
         start_date VARCHAR(150) NOT NULL,
         end_date VARCHAR(150) NOT NULL,
         created date DEFAULT CURRENT_TIMESTAMP
