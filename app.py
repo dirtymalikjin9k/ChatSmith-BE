@@ -522,7 +522,7 @@ def api_getSubscription():
         print(selects)
         
         if(len(selects) == 0) :
-            return '1'
+             return jsonify({'customerId': '','count':'1'})
         else:
             subscription = selects[len(selects)-1]
             print("subscription = ", subscription)
