@@ -220,7 +220,7 @@ def api_auth_register():
             if new_created_user is None:
                 print(new_created_user)
                 return jsonify({'message': 'Email already exist'}), 404
-            return "ok"
+            return new_created_user
         except:
             return jsonify({'message': 'Email already exist'}), 404
 
@@ -509,7 +509,7 @@ def api_getSubscription():
     requestInfo = request.get_json()
     email = requestInfo['user_email']
     if email == '':
-        return "1"
+        return jsonify({'customerId': '','count':'1'})
     else:
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
