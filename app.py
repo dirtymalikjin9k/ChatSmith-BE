@@ -249,7 +249,7 @@ def api_auth_google_register():
             if new_created_user is None:
                 print(new_created_user)
                 return jsonify({'message': 'Email already exist'}), 404
-            return new_created_user
+            return "ok"
         except:
             return jsonify({'message': 'Email already exist'}), 404
 
