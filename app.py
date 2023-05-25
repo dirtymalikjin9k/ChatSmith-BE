@@ -477,20 +477,14 @@ def api_webhook():
 
     print("Webhook event recognized:", event['type'])
 
-    if charge : 
+    if invoice : 
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
 
-        email = charge['billing_details']['email']
+        email = invoice['customer_email']
+        customer_id = invoice['customer']
 
-        payment_method = charge['payment_method']
-
-        if(charge['amount'] == 2000):
-            type = 2
-        else:
-            type = 1
-
-        start_date = charge['created']
+        start_date = invoice['created']
 
         date_obj = datetime.datetime.utcfromtimestamp(start_date)
 
@@ -498,8 +492,8 @@ def api_webhook():
 
         end_date = int(end_date_obj.timestamp())
         
-        cursor.execute('INSERT INTO subscription(email, payment_method, type, start_date, end_date) VALUES (%s, %s, %s, %s, %s) RETURNING *',
-                    (email, payment_method, type, start_date, end_date))
+        cursor.execute('INSERT INTO subscription(email, customer_id, start_date, end_date) VALUES (%s, %s, %s, %s) RETURNING *',
+                    (email, payment_method, start_date, end_date))
         new_created_user = cursor.fetchone()
         print(new_created_user)
 
