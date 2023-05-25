@@ -509,7 +509,7 @@ def api_getSubscription():
     requestInfo = request.get_json()
     email = requestInfo['user_email']
     if email == '':
-        return "ok"
+        return "1"
     else:
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
@@ -530,7 +530,7 @@ def api_getSubscription():
             current_time = datetime.datetime.now()
             
             if end_time > current_time:
-                return '10'
+                return jsonify({'customerId': subscription['customer_id'],'count':'10'})
             else:
                 cursor.execute('DELETE FROM subscription WHERE email = %s ',
                                 (email, ))            
@@ -542,7 +542,7 @@ def api_getSubscription():
 
                 cursor.close()
                 connection.close()
-                return '1'
+                return jsonify({'customerId': subscription['customer_id'],'count':'1'})
 
 @app.post('/api/unSubscribe')
 def api_unsubscribe():
