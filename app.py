@@ -482,8 +482,9 @@ def api_webhook():
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
 
         email = invoice['customer_email']
+        print("email = ", email)
         customer_id = invoice['customer']
-
+        print("customer_id = ", customer_id)
         start_date = invoice['created']
 
         date_obj = datetime.datetime.utcfromtimestamp(start_date)
