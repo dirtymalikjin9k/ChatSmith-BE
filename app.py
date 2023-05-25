@@ -217,10 +217,12 @@ def api_auth_register():
             cursor.close()
             connection.close()
 
-            return "ok"
-        except Exception as e:
-            print('Error: '+ str(e))
-            return "Email already exist"
+            if new_created_user is None:
+                print(new_created_user)
+                return jsonify({'message': 'Email already exist'}), 404
+            return new_created_user
+        except:
+            return jsonify({'message': 'Email already exist'}), 404
 
 @app.post('/api/auth/login')
 def api_auth_login():
