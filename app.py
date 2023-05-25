@@ -457,17 +457,17 @@ def api_webhook():
         
     # Handle the event
      # Handle the event
-    print("event-----",event)
+    # print("event-----",event)
     charge = session = invoice = customer = None
     if event['type'] == 'customer.created':
       customer  = event['data']['object']
-    #   print("customer  = ",customer )
+      print("customer  = ",customer )
     elif event['type'] == 'checkout.session.completed':
       session = event['data']['object']
-    #   print("session = ",session)
+      print("session = ",session)
     elif event['type'] == 'charge.succeeded':
       charge = event['data']['object']
-    #   print("charge = ",charge)
+      print("charge = ",charge)
     elif event['type'] == 'invoice.paid':
       invoice = event['data']['object']
       print("invoice = ",invoice)
