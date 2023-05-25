@@ -44,7 +44,7 @@ query = """
 query = """
     CREATE TABLE users (
         id SERIAL PRIMARY KEY,
-        email VARCHAR(150) NOT NULL,
+        email VARCHAR(150) NOT NULL UNIQUE,
         password VARCHAR(150) NOT NULL,
         created date DEFAULT CURRENT_TIMESTAMP
     )
