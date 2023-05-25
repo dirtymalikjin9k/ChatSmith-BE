@@ -493,7 +493,7 @@ def api_webhook():
         end_date = int(end_date_obj.timestamp())
         
         cursor.execute('INSERT INTO subscription(email, customer_id, start_date, end_date) VALUES (%s, %s, %s, %s) RETURNING *',
-                    (email, payment_method, start_date, end_date))
+                    (email, customer_id, start_date, end_date))
         new_created_user = cursor.fetchone()
         print(new_created_user)
 
