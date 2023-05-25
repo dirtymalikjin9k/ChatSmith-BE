@@ -283,6 +283,34 @@ def api_auth_login():
         except:
             return jsonify({'message': 'Email or Password does not correct'}), 404
 
+@app.post('/api/auth/googleLogin')
+def api_auth_googleLogin():
+    requestInfo = request.get_json()
+    email = requestInfo['user_email']
+    if email == '':
+        return {}
+    else:
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+
+        try:
+            print(email)
+            cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
+            user = cursor.fetchone()
+            print("user-------", user)
+            connection.commit()
+            cursor.close()
+            connection.close()
+
+            
+            if user is None:
+                print(user)
+                return jsonify({'message': 'Email or Password does not correct'}), 404
+            return "ok"
+        except:
+            return jsonify({'message': 'Email or Password does not correct'}), 404
+
+
 @app.post('/api/newChat')
 def api_newChat():
     requestInfo = request.get_json()
