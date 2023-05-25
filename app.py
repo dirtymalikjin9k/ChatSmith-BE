@@ -461,7 +461,7 @@ def api_webhook():
     if event['type'] == 'customer.created':
       customer  = event['data']['object']
       print("customer  = ",customer )
-    if event['type'] == 'checkout.session.completed':
+    elif event['type'] == 'checkout.session.completed':
       session = event['data']['object']
       print("session = ",session)
     elif event['type'] == 'charge.succeeded':
@@ -473,6 +473,8 @@ def api_webhook():
     # ... handle other event types
     else:
       print('Unhandled event type {}'.format(event['type']))
+
+    print("Webhook event recognized:", event['type'])
 
     if charge : 
         connection = get_connection()
