@@ -1,10 +1,10 @@
-    connection = connect(host=host,
-                            port=port,
-                            dbname=dbname,
-                            user=user,
-                            password=password)
+connection = connect(host=host,
+                        port=port,
+                        dbname=dbname,
+                        user=user,
+                        password=password)
 
-    cursor = connection.cursor()
+cursor = connection.cursor()
 
 
 query = """
@@ -12,8 +12,6 @@ query = """
         id SERIAL PRIMARY KEY,
         email VARCHAR(150) NOT NULL,
         instance_name VARCHAR(150) NOT NULL,
-        chat_name VARCHAR(150) NOT NULL,
-        prompt TEXT NOT NULL,
         urls TEXT NOT NULL,
         custom_text TEXT,
         bot_id INTEGER NOT NULL,

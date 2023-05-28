@@ -35,6 +35,7 @@ dbname = environ.get('DB_NAME')
 user = environ.get('DB_USER')
 password = environ.get('DB_PASSWORD')
 
+
 def get_connection():
     conection = connect(host=host,
                         port=port,
@@ -316,8 +317,6 @@ def api_newChat():
     requestInfo = request.get_json()
     email = requestInfo['user_email']
     instance_name = requestInfo['instace_name']
-    chat_name = requestInfo['chat_name']
-    prompt = requestInfo['prompt']
     bot_id = requestInfo['bot_id']
     urls_input = requestInfo['urls_input']
     chats = [{
@@ -328,15 +327,15 @@ def api_newChat():
     print("urls_input = ", urls_input)
     # Extract the root URL from the first URL
 
-    if email == '' or prompt == '' or bot_id == '' or urls_input== '' :
+    if email == '' or instance_name == '' or bot_id == '' or urls_input== '' :
         return {}
     else:
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         try:
             chats_str = json.dumps(chats)
-            cursor.execute('INSERT INTO chats (email, instance_name, chat_name, prompt, urls, bot_id, chats, complete) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING *',
-                        (email, instance_name, chat_name, prompt, urls_input, bot_id, chats_str, 'false'))
+            cursor.execute('INSERT INTO chats (email, instance_name, urls, bot_id, chats, complete) VALUES (%s, %s, %s, %s, %s, %s) RETURNING *',
+                        (email, instance_name, urls_input, bot_id, chats_str, 'false'))
             new_created_chat = cursor.fetchone()
             connection.commit()
             print(new_created_chat)
@@ -377,12 +376,10 @@ def api_updateChat():
     requestInfo = request.get_json()
     email = requestInfo['user_email']
     instance_name = requestInfo['instance_name']
-    chat_name = requestInfo['chat_name']
-    prompt = requestInfo['prompt']
     bot_id = requestInfo['bot_id']
     urls_input = requestInfo['urls_input']
     custom_text = requestInfo['custom_text']
-    if email == '' or instance_name == '' or prompt == '' or bot_id == '' or urls_input== '' :
+    if email == '' or instance_name == '' or bot_id == '' or urls_input== '' :
         return {}
     else:
         user_email_hash = create_hash(email)
@@ -392,8 +389,8 @@ def api_updateChat():
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         try:
-            cursor.execute("UPDATE chats SET instance_name = %s, chat_name = %s, prompt = %s, urls = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
-                    (instance_name, chat_name, prompt, urls_input, custom_text, 'false', email, bot_id))
+            cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
+                    (instance_name, urls_input, custom_text, 'false', email, bot_id))
             connection.commit()
 
 
@@ -405,8 +402,8 @@ def api_updateChat():
                 with open(filename, "w") as file:
                     file.write(custom_text)
             response = delete_data_collection(email, bot_id)
-            cursor.execute("UPDATE chats SET instance_name = %s, chat_name = %s, prompt = %s, urls = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
-                    (instance_name, chat_name, prompt, urls_input, custom_text, 'true', email, bot_id))
+            cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
+                    (instance_name, urls_input, custom_text, 'true', email, bot_id))
             connection.commit()
             cursor.close()
             connection.close()

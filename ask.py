@@ -13,6 +13,19 @@ import hashlib
 import json
 from dotenv import load_dotenv
 
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import Chroma
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.llms import OpenAI
+from langchain import OpenAI
+from langchain.document_loaders import PyPDFLoader, TextLoader
+from langchain.chains import ConversationalRetrievalChain
+from langchain.document_loaders import DirectoryLoader
+from langchain.chat_models import ChatOpenAI
+import tiktoken
+from langchain.callbacks import get_openai_callback
+from langchain.memory import ConversationBufferMemory
+
 load_dotenv()
 
 os.environ["OPENAI_API_KEY"] = environ.get('OPENAI_API_KEY')
@@ -25,7 +38,6 @@ dbname = environ.get('DB_NAME')
 user = environ.get('DB_USER')
 password = environ.get('DB_PASSWORD')
 
-
 def get_connection():
     conection = connect(host=host,
                         port=port,
@@ -35,99 +47,80 @@ def get_connection():
     return conection
 
 
-def load_index(data_directory):
-    if os.path.isfile(f"./{data_directory}/index.json"):
-        print("data_directory:", data_directory)
-        index = GPTVectorStoreIndex.build_index_from_nodes(
-            f"{data_directory}/index.json")
-    else:
-        print("data_directory=", data_directory)
-        from construct_index import construct_index
-        index = construct_index(data_directory)
-    print("index=", index)
-    return index
-
-
 async def ask_ai(query, data_directory, user_email, bot_id):
-    # index = load_index(data_directory)
-    try:
-        connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+    print("data_directory ==",data_directory)
+    # documents = SimpleDirectoryReader(data_directory).load_data()
 
-        cursor.execute(
-            'SELECT * FROM chats WHERE email = %s AND bot_id = %s ', (user_email, bot_id,))
-        chat = cursor.fetchone()
-        print("chat = ", chat)
-        bot_name = chat['chat_name']
-        prompt_base = chat['prompt']
+    loader = DirectoryLoader(data_directory, glob="./*.txt", loader_cls=TextLoader)
+    documents = loader.load()
 
-        connection.commit()
-        cursor.close()
-        connection.close()
+    print("documents = ", documents)
 
-        # set number of output tokens
-        num_outputs = 512
+    # Split and diveide text to prepare embeddings
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=50)   
 
-        # define LLM
-        llm_predictor = LLMPredictor(llm=OpenAI(
-            temperature=0.7, model_name="text-davinci-003", max_tokens=num_outputs))
+    # texts = text_splitter.split_documents(documents)
 
-        user_email_hash = create_hash(user_email)
-        collection_name = f"collection_{user_email_hash}_{bot_id}"
-        chroma_collection = chroma_client.get_or_create_collection(
-            collection_name)
-        embed_model = LangchainEmbedding(HuggingFaceEmbeddings())
+    # #preview one of the texts that has been split. For testing only
+    # texts[0]
 
-        print("count=", chroma_collection.count())
+    # #preview the number of documents that was split. For testing only
+    # len(texts)
 
-        vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-        storage_context = StorageContext.from_defaults(
-            vector_store=vector_store)
-        service_context = ServiceContext.from_defaults(
-            llm_predictor=llm_predictor, embed_model=embed_model)
-        print(storage_context)
-        documents = SimpleDirectoryReader(data_directory).load_data()
-        index = GPTVectorStoreIndex.from_documents(
-                documents, storage_context=storage_context, service_context=service_context)
-        
-        # index.storage_context.persist(f"{data_directory}/index.json"
-        prompt = "Your name is " + bot_name + "." + prompt_base
-        print(prompt)
-        query_engine = index.as_query_engine()
-        response = query_engine.query(prompt + query)
-        print("response = ", response.response)
-        text = response.response
+    # create the embeddings
+    embeddings = OpenAIEmbeddings()
+    vectorstore = Chroma.from_documents(documents, embeddings)
 
-        # Check if the response contains a link
-        url_pattern = re.compile(r"(?P<url>https?://[^\s]+)")
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    retriever_openai = vectorstore.as_retriever(search_kwargs={"k": 3})
 
-        # replace URLs with anchor tags in the text
-        html_text = url_pattern.sub(
-            r"<a href='\g<url>' target='_blank' style='color: #0000FF'>\g<url></a>", text)
+    #create the chain/Screen Shot 2023-05-26 at 9.58.31 AM.png
+    llm = ChatOpenAI(model_name='gpt-3.5-turbo', temperature=0.2) 
+    qa = ConversationalRetrievalChain.from_llm(llm, retriever_openai, memory=memory)
 
-        newMessage = {
-            "question": query,
-            "answer": html_text
-        }
-        connection = get_connection()
-        cur = connection.cursor(cursor_factory=extras.RealDictCursor)
-        cur.execute(
-            'SELECT * FROM chats WHERE email = %s AND bot_id = %s', (user_email, bot_id))
-        chat = cur.fetchone()
-        chat_content = chat['chats']
-        chat_content.append(newMessage)
-        print(chat_content)
-        updated_json_data_string = json.dumps(chat_content)
-        cur.execute("UPDATE chats SET chats = %s WHERE email = %s AND bot_id = %s",
-                    (updated_json_data_string, user_email, bot_id))
-        connection.commit()
-        cur.close()
-        connection.close()
-        # return the converted text with HTML anchor tags
-        return html_text
-    except Exception as e:
-        print("Error: " + str(e))
-        return "It's no working."
+    #test a message and log cost of API call
+
+    with get_openai_callback() as cb:
+        result = qa({"question": query})
+        print(cb)
+
+    print(result)
+
+    print(result['answer'])
+
+    text = result['answer']
+
+    # Check if the response contains a link
+    url_pattern = re.compile(r"(?P<url>https?://[^\s]+)")
+
+    # replace URLs with anchor tags in the text
+    html_text = url_pattern.sub(
+        r"<a href='\g<url>' target='_blank' style='color: #0000FF'>\g<url></a>", text)
+
+    newMessage = {
+        "question": query,
+        "answer": html_text
+    }
+
+    connection = get_connection()
+    cur = connection.cursor(cursor_factory=extras.RealDictCursor)
+    cur.execute(
+        'SELECT * FROM chats WHERE email = %s AND bot_id = %s', (user_email, bot_id))
+    chat = cur.fetchone()
+    chat_content = chat['chats']
+    chat_content.append(newMessage)
+    print(chat_content)
+    updated_json_data_string = json.dumps(chat_content)
+    cur.execute("UPDATE chats SET chats = %s WHERE email = %s AND bot_id = %s",
+                (updated_json_data_string, user_email, bot_id))
+    connection.commit()
+    cur.close()
+    connection.close()
+    # return the converted text with HTML anchor tags
+    return html_text
+    # return "ok"
+
+
 
 
 def create_hash(text):
@@ -149,8 +142,8 @@ def delete_data_collection(user_email, bot_id):
         connection.commit()
         cursor.close()
         connection.close()
-        collection_name = f"my_collection_{create_hash(user_email)}_{bot_id}"
-        chroma_client.delete_collection(name=collection_name)
+        # collection_name = f"my_collection_{create_hash(user_email)}_{bot_id}"
+        # chroma_client.delete_collection(name=collection_name)
         return "ok"
     except:
         return "cant delete"
@@ -160,13 +153,12 @@ def delete_collection(user_email, connection, cursor):
         
         cursor.execute("SELECT * FROM chats WHERE email = %s ",
                     (user_email,))
-        chats = cursor.fetchall()
         connection.commit()
         
-        if(len(chats) > 0):
-            for chat in chats:
-                collection_name = f"my_collection_{create_hash(user_email)}_{chat['bot_id']}"
-                # chroma_client.delete_collection(name=collection_name)
+        # if(len(chats) > 0):
+        #     for chat in chats:
+        #         collection_name = f"my_collection_{create_hash(user_email)}_chat['bot_id']}"
+        #         # chroma_client.delete_collection(name=collection_name)
 
         cursor.execute('DELETE FROM chats WHERE email = %s',
                                 (user_email,))
