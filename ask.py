@@ -77,7 +77,7 @@ async def ask_ai(query, data_directory, user_email, bot_id):
     #create the chain/Screen Shot 2023-05-26 at 9.58.31 AM.png
     llm = ChatOpenAI(model_name='gpt-3.5-turbo', temperature=0.2) 
     qa = ConversationalRetrievalChain.from_llm(llm, retriever_openai, memory=memory)
-
+    print("qa = ", qa)
     #test a message and log cost of API call
 
     with get_openai_callback() as cb:
