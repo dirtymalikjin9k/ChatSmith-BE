@@ -70,7 +70,7 @@ async def ask_ai(query, data_directory, user_email, bot_id):
     # create the embeddings
     embeddings = OpenAIEmbeddings()
     vectorstore = Chroma.from_documents(documents, embeddings)
-
+    print("vectorstore = ",vectorstore)
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     retriever_openai = vectorstore.as_retriever(search_kwargs={"k": 3})
 
