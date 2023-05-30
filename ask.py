@@ -70,10 +70,9 @@ async def ask_ai(query, data_directory, user_email, bot_id):
     # create the embeddings
     embeddings = OpenAIEmbeddings()
     vectorstore = Chroma.from_documents(documents, embeddings)
-    print("vectorstore = ",vectorstore)
+    print("embedding = ",embeddings)
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
     retriever_openai = vectorstore.as_retriever(search_kwargs={"k": 3})
-    print("retriever_openai = ", retriever_openai)
     #create the chain/Screen Shot 2023-05-26 at 9.58.31 AM.png
     llm = ChatOpenAI(model_name='gpt-3.5-turbo', temperature=0.2) 
     qa = ConversationalRetrievalChain.from_llm(llm, retriever_openai, memory=memory)
