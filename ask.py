@@ -19,7 +19,8 @@ from langchain.memory import ConversationBufferMemory
 
 load_dotenv()
 
-os.environ["OPENAI_API_KEY"] = environ.get('OPENAI_API_KEY')
+if environ.get('OPENAI_API_KEY') is not None:
+    os.environ["OPENAI_API_KEY"] = environ.get('OPENAI_API_KEY')
 
 chroma_client = chromadb.Client()
 
