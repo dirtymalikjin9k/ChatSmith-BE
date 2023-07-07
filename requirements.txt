@@ -1,9 +1,8 @@
 bs4==0.0.1
 Flask==2.2.2
 Flask-Cors==3.0.10
-langchain==0.0.176
+langchain==0.0.180
 chromadb==0.3.21
-llama-index==0.6.1
 urllib3==1.26.15
 stripe==5.4.0
 psycopg2==2.9.5
