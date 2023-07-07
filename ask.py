@@ -1,12 +1,6 @@
-from llama_index import SimpleDirectoryReader, GPTVectorStoreIndex, LLMPredictor, PromptHelper, ServiceContext, GPTKeywordTableIndex, LangchainEmbedding
-from llama_index.vector_stores import ChromaVectorStore
-from llama_index.storage.storage_context import StorageContext
-from langchain import OpenAI
-from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 import chromadb
 import os
 from psycopg2 import connect, extras
-from urllib.parse import urlparse
 import re
 from os import environ
 import hashlib
@@ -16,13 +10,10 @@ from dotenv import load_dotenv
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.llms import OpenAI
-from langchain import OpenAI
 from langchain.document_loaders import PyPDFLoader, TextLoader
 from langchain.chains import ConversationalRetrievalChain
 from langchain.document_loaders import DirectoryLoader
 from langchain.chat_models import ChatOpenAI
-import tiktoken
 from langchain.callbacks import get_openai_callback
 from langchain.memory import ConversationBufferMemory
 
