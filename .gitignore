@@ -6,6 +6,7 @@
 .pnp.js
 /data
 /.chroma
+/.env
 /__pycache__
 
 # testing

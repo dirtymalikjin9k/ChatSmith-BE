@@ -80,9 +80,12 @@ def scrape_urls(urls, root_url, user_email, bot_id):
         try:
             time.sleep(5)
             print(url)
-            page = requests.get(url)
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+            page = requests.get(url, headers=headers)
+            print("page =", page)
             soup = BeautifulSoup(page.content, "html.parser")
             title = soup.title.string
+            print("title = ", title)
             # # Remove script and style tags
             for script in soup(["script", "style"]):
                 script.extract()
@@ -136,8 +139,10 @@ def scrape_urls(urls, root_url, user_email, bot_id):
                         unique_urls.add(url)
                         f.write(f"{url}\n")
                 f.write("\n")
-        except:
+        except Exception as e:
+            print("error:",str(e))
             return 
+    return 
 
 @app.post('/api/chat')
 async def api_ask():
@@ -193,7 +198,6 @@ def api_bot_delete():
         except Exception as e:
             print('Error: ' + str(e))
             return "ok"
-
 
 @app.post('/api/auth/register')
 def api_auth_register():
@@ -310,7 +314,6 @@ def api_auth_googleLogin():
             return "ok"
         except:
             return jsonify({'message': 'Email or Password does not correct'}), 404
-
 
 @app.post('/api/newChat')
 def api_newChat():
