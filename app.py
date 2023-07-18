@@ -45,21 +45,6 @@ def get_connection():
                         password=password)
     return conection
 
-@app.post("/api/addData")
-def index():
-    requestInfo = request.get_json()
-    print(requestInfo)
-    user_email = requestInfo['email']
-    urls_input = requestInfo["urls_input"]
-    bot_id = requestInfo['bot_id']
-    urls = [url.strip() for url in urls_input.split(",")]
-
-    # Extract the root URL from the first URL
-    root_url = urljoin(urls[0], "/")
-
-    scrape_urls(urls, root_url, user_email, bot_id)
-    return "Ok"
-
 def scrape_urls(urls, root_url, user_email, bot_id):
     user_email_hash = create_hash(user_email)
     print(user_email_hash)
@@ -141,32 +126,62 @@ def scrape_urls(urls, root_url, user_email, bot_id):
 @app.post('/api/chat')
 async def api_ask():
     requestInfo = request.get_json()
-    print(requestInfo)
-    user_email = requestInfo['email']
+    auth_email = requestInfo['email']
     bot_id = requestInfo['bot_id']
-    
-    user_email_hash = create_hash(user_email)
-    print(user_email_hash)
-    data_directory = f"data//{user_email_hash}//{bot_id}"
+    headers = request.headers
+    bearer = headers.get('Authorization')
 
-    query = request.json['message_text']
-    print("query=", query)
-    print("bot_id=", bot_id)
-    print('data_directory = ', data_directory)
-    response = await ask_ai(query, data_directory, user_email, bot_id)
-    app.logger.debug(f"Query: {query}")
-    app.logger.debug(f"Response: {response}")
-    print("response:", response)
-    return jsonify({'response': response})
+    try:
+        token = bearer.split()[1]
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
+
+        email = decoded['email']
+
+        if(email != auth_email):
+            return jsonify({'message': 'Authrization is faild'}), 404
+
+        user_email_hash = create_hash(email)
+        print(user_email_hash)
+        data_directory = f"data//{user_email_hash}//{bot_id}"
+
+        query = request.json['message_text']
+        print("query=", query)
+        print("bot_id=", bot_id)
+        print('data_directory = ', data_directory)
+        response = await ask_ai(query, data_directory, email, bot_id)
+        app.logger.debug(f"Query: {query}")
+        app.logger.debug(f"Response: {response}")
+        print("response:", response)
+        return jsonify({'message': response}), 200
+    except Exception as e:
+        print('Error: '+ str(e))
+        return jsonify({'message': 'Bad Request'}), 404
 
 @app.post('/api/chatsDelete')
 def api_chats_delte():
     requestInfo = request.get_json()
     print(requestInfo)
-    user_email = requestInfo['email']
+    auth_email = requestInfo['email']
     bot_id = requestInfo['bot_id']
-    response = delete_data_collection(user_email, bot_id)
-    return response
+    headers = request.headers
+    bearer = headers.get('Authorization')
+    try:
+        token = bearer.split()[1]
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
+
+        email = decoded['email']
+
+        if(email != auth_email):
+            return jsonify({'message': 'Authrization is faild'}), 404
+        response = delete_data_collection(auth_email, bot_id)
+        if response:
+            return jsonify({'message': 'Delete Success'}), 200
+        else:
+            return jsonify({'message': 'bad request'}), 404
+    except Exception as e:
+        print('Error: ' + str(e))
+        return jsonify({'message': 'bad request'}), 404
+
 
 @app.post('/api/botDelete')
 def api_bot_delete():
@@ -230,7 +245,7 @@ def api_auth_googleLogin():
 @app.post('/api/newChat')
 def api_newChat():
     requestInfo = request.get_json()
-    email = requestInfo['email']
+    auth_email = requestInfo['email']
     instance_name = requestInfo['instace_name']
     bot_id = requestInfo['bot_id']
     urls_input = requestInfo['urls_input']
@@ -240,93 +255,107 @@ def api_newChat():
     }]
 
     print("urls_input = ", urls_input)
-    # Extract the root URL from the first URL
 
-    if email == '' or instance_name == '' or bot_id == '' or urls_input== '' :
-        return {}
-    else:
+    headers = request.headers
+    bearer = headers.get('Authorization')
+    try:
+        token = bearer.split()[1]
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
+
+        email = decoded['email']
+
+        if(email != auth_email):
+            return jsonify({'message': 'Authrization is faild'}), 404
+
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
-        try:
-            chats_str = json.dumps(chats)
-            cursor.execute('INSERT INTO chats (email, instance_name, urls, bot_id, chats, complete) VALUES (%s, %s, %s, %s, %s, %s) RETURNING *',
-                        (email, instance_name, urls_input, bot_id, chats_str, 'false'))
-            new_created_chat = cursor.fetchone()
-            connection.commit()
-            print(new_created_chat)
+        chats_str = json.dumps(chats)
+        cursor.execute('INSERT INTO chats (email, instance_name, urls, bot_id, chats, complete) VALUES (%s, %s, %s, %s, %s, %s) RETURNING *',
+                    (email, instance_name, urls_input, bot_id, chats_str, 'false'))
+        new_created_chat = cursor.fetchone()
+        connection.commit()
+        print(new_created_chat)
 
-            cursor.execute('SELECT * FROM subscription where email = %s', (email ,))
-            subscription = cursor.fetchone()
-            connection.commit()
+        cursor.execute('SELECT * FROM subscription where email = %s', (email ,))
+        subscription = cursor.fetchone()
+        connection.commit()
 
-            urls = [url.strip() for url in urls_input.split(",")]
+        urls = [url.strip() for url in urls_input.split(",")]
 
-            if(subscription is None):
+        if(subscription is None):
+            urls = urls[:2]
+        else: 
+            end_time = datetime.datetime.fromtimestamp(int(subscription['end_date']))
+            current_time = datetime.datetime.now()
+            
+            if(current_time > end_time):
                 urls = urls[:2]
-            else: 
-                end_time = datetime.datetime.fromtimestamp(int(subscription['end_date']))
-                current_time = datetime.datetime.now()
-                
-                if(current_time > end_time):
-                    urls = urls[:2]
 
-            print(len(urls))
-            root_url = urljoin(urls[0], "/")
-            scrape_urls(urls, root_url, email, bot_id)
+        print(len(urls))
+        root_url = urljoin(urls[0], "/")
+        scrape_urls(urls, root_url, email, bot_id)
 
-            cursor.execute('UPDATE chats SET complete = %s WHERE email = %s AND bot_id = %s', ('true', email, bot_id))
-            # new_created_chat = cursor.fetchone()
+        cursor.execute('UPDATE chats SET complete = %s WHERE email = %s AND bot_id = %s', ('true', email, bot_id))
+        # new_created_chat = cursor.fetchone()
 
-            connection.commit()
-            cursor.close()
-            connection.close()
+        connection.commit()
+        cursor.close()
+        connection.close()
 
-            return "ok"
-        except Exception as e:
-            print('Error: '+ str(e))
-            return "can not save new chats" 
+        return jsonify({'message': 'Success Create'}), 200
+    except Exception as e:
+        print('Error: '+ str(e))
+        return jsonify({'message': 'Bad Request'}), 404
 
 @app.post('/api/updateChat')
 def api_updateChat():
     requestInfo = request.get_json()
-    email = requestInfo['email']
+    auth_email = requestInfo['email']
     instance_name = requestInfo['instance_name']
     bot_id = requestInfo['bot_id']
     urls_input = requestInfo['urls_input']
     custom_text = requestInfo['custom_text']
-    if email == '' or instance_name == '' or bot_id == '' or urls_input== '' :
-        return {}
-    else:
+    headers = request.headers
+    bearer = headers.get('Authorization')
+    print("bearer = ", bearer)
+    try:
+        token = bearer.split()[1]
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
+
+        email = decoded['email']
+
+        if(email != auth_email):
+            return jsonify({'message': 'Authrization is faild'}), 404
+    
         user_email_hash = create_hash(email)
         print(user_email_hash)
         data_directory = f"data/{user_email_hash}/{bot_id}"
         shutil.rmtree(data_directory)
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
-        try:
-            cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
-                    (instance_name, urls_input, custom_text, 'false', email, bot_id))
-            connection.commit()
+        cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
+                (instance_name, urls_input, custom_text, 'false', email, bot_id))
+        connection.commit()
 
 
-            urls = [url.strip() for url in urls_input.split(",")]
-            root_url = urljoin(urls[0], "/")
-            scrape_urls(urls, root_url, email, bot_id)
-            if custom_text != "":
-                filename = f"{data_directory}/custom_text.txt"
-                with open(filename, "w") as file:
-                    file.write(custom_text)
-            response = delete_data_collection(email, bot_id)
-            cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
-                    (instance_name, urls_input, custom_text, 'true', email, bot_id))
-            connection.commit()
-            cursor.close()
-            connection.close()
+        urls = [url.strip() for url in urls_input.split(",")]
+        root_url = urljoin(urls[0], "/")
+        scrape_urls(urls, root_url, email, bot_id)
+        if custom_text != "":
+            filename = f"{data_directory}/custom_text.txt"
+            with open(filename, "w") as file:
+                file.write(custom_text)
+        response = delete_data_collection(email, bot_id)
+        cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
+                (instance_name, urls_input, custom_text, 'true', email, bot_id))
+        connection.commit()
+        cursor.close()
+        connection.close()
 
-            return "ok"
-        except Exception as e:
-            print('Error: '+ str(e))
-            return "can not save new chats" 
+        return jsonify({'message': 'Update Success'}), 404
+    except Exception as e:
+        print('Error: '+ str(e))
+        return jsonify({'message': 'Bad Request'}), 404
 
 @app.post('/api/getChatInfos')
 def api_getChatInfos():

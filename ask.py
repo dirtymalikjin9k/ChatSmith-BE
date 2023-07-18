@@ -115,7 +115,7 @@ def create_hash(text):
     return hashlib.md5(text.encode()).hexdigest()
 
 
-def delete_data_collection(user_email, bot_id):
+def delete_data_collection(email, bot_id):
     try:
         chats = [{
             "question": "",
@@ -126,15 +126,15 @@ def delete_data_collection(user_email, bot_id):
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)        
         cursor.execute("UPDATE chats SET chats = %s WHERE email = %s AND bot_id = %s",
-                    (chats_str, user_email, bot_id))
+                    (chats_str, email, bot_id))
         connection.commit()
         cursor.close()
         connection.close()
         # collection_name = f"my_collection_{create_hash(user_email)}_{bot_id}"
         # chroma_client.delete_collection(name=collection_name)
-        return "ok"
+        return True
     except:
-        return "cant delete"
+        return False
     
 def delete_collection(user_email, connection, cursor):
     try:
