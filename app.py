@@ -13,6 +13,7 @@ import json
 import shutil
 import stripe
 from datetime import datetime, timedelta
+from google.oauth2 import id_token
 from dateutil.relativedelta import relativedelta
 import jwt
 from sendgrid import SendGridAPIClient
@@ -182,7 +183,6 @@ def api_chats_delte():
         print('Error: ' + str(e))
         return jsonify({'message': 'bad request'}), 404
 
-
 @app.post('/api/botDelete')
 def api_bot_delete():
     requestInfo = request.get_json()
@@ -215,32 +215,75 @@ def api_bot_delete():
         print('Error: ' + str(e))
         return jsonify({'message': 'bad request'}), 404
 
+def verify_google_token(token):
+    # Specify the client ID of the Google API Console project that the credential is from
+    CLIENT_ID = '241041186069-6655bsntan86u6hhf4h7t6897o2i4pn8.apps.googleusercontent.com'
+
+    try:
+        # Verify and decode the token
+        decoded_token = id_token.verify_oauth2_token(token, requests.Request(), CLIENT_ID)
+
+        # Extract information from the decoded token
+        user_id = decoded_token['sub']
+        user_email = decoded_token['email']
+        user_name = decoded_token['name']
+        print("email == ", user_email)
+        # Return a dictionary containing the user information
+        return {
+            'id': user_id,
+            'email': user_email,
+            'name': user_name
+        }
+    except ValueError:
+        # Handle invalid token error
+        return None
+
 @app.post('/api/auth/googleLogin')
 def api_auth_googleLogin():
     requestInfo = request.get_json()
     email = requestInfo['email']
-    if email == '':
-        return {}
-    else:
-        connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+    credential = requestInfo['credential']
 
+    if email == '' or credential == '':
+        return jsonify({'message': 'Email is required'}), 404
+    
+    else:
         try:
-            print(email)
-            cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
+            responsePayload = verify_google_token(credential)
+            print(responsePayload)
+            if responsePayload['email'] != email:
+                    return jsonify({'message': 'Bad request'}), 404
+            connection = get_connection()
+            cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+
+            cursor.execute('SELECT * FROM users WHERE email = %s', (email, ))
             user = cursor.fetchone()
-            print("user-------", user)
+
+            if user is not None:
+                payload = {
+                'email': email
+                }
+                token = jwt.encode(payload, 'chatsavvy_secret', algorithm='HS256')
+                return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
+        
+            cursor.execute('INSERT INTO users(email,password) VALUES (%s, %s) RETURNING *',
+                    (email, create_hash('rmeosmsdjajslrmeosmsdjajsl')))
+            new_created_user = cursor.fetchone()
+            print(new_created_user)
+
             connection.commit()
             cursor.close()
             connection.close()
 
+            payload = {
+                'email': email
+            }
+            token = jwt.encode(payload, 'chatsavvy_secret', algorithm='HS256')
             
-            if user is None:
-                print(user)
-                return jsonify({'message': 'Email or Password does not correct'}), 404
-            return "ok"
+            return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
+
         except:
-            return jsonify({'message': 'Email or Password does not correct'}), 404
+            return jsonify({'message': 'Bad request'}), 404
 
 @app.post('/api/newChat')
 def api_newChat():
