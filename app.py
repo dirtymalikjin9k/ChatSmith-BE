@@ -1,4 +1,3 @@
-import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import os
@@ -14,6 +13,7 @@ import shutil
 import stripe
 from datetime import datetime, timedelta
 from google.oauth2 import id_token
+from google.auth.transport import requests
 from dateutil.relativedelta import relativedelta
 import jwt
 from sendgrid import SendGridAPIClient
@@ -234,56 +234,57 @@ def verify_google_token(token):
             'email': user_email,
             'name': user_name
         }
-    except ValueError:
+    except Exception as e:
+        print("error:", str(e))
         # Handle invalid token error
         return None
-
+    
 @app.post('/api/auth/googleLogin')
 def api_auth_googleLogin():
     requestInfo = request.get_json()
     email = requestInfo['email']
     credential = requestInfo['credential']
 
-    if email == '' or credential == '':
-        return jsonify({'message': 'Email is required'}), 404
-    
-    else:
-        try:
-            responsePayload = verify_google_token(credential)
-            print(responsePayload)
-            if responsePayload['email'] != email:
-                    return jsonify({'message': 'Bad request'}), 404
-            connection = get_connection()
-            cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+    print("email = ", email)
+    print("credential = ", credential)
 
-            cursor.execute('SELECT * FROM users WHERE email = %s', (email, ))
-            user = cursor.fetchone()
+    try:
+        responsePayload = verify_google_token(credential)
+        print("responseEmail = ",responsePayload['email'])
+        if responsePayload['email'] != email:
+                return jsonify({'message': 'Bad request'}), 404
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
 
-            if user is not None:
-                payload = {
-                'email': email
-                }
-                token = jwt.encode(payload, 'chatsavvy_secret', algorithm='HS256')
-                return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
-        
-            cursor.execute('INSERT INTO users(email,password) VALUES (%s, %s) RETURNING *',
-                    (email, create_hash('rmeosmsdjajslrmeosmsdjajsl')))
-            new_created_user = cursor.fetchone()
-            print(new_created_user)
+        cursor.execute('SELECT * FROM users WHERE email = %s', (email, ))
+        user = cursor.fetchone()
 
-            connection.commit()
-            cursor.close()
-            connection.close()
-
+        if user is not None:
             payload = {
-                'email': email
+            'email': email
             }
             token = jwt.encode(payload, 'chatsavvy_secret', algorithm='HS256')
-            
             return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
+    
+        cursor.execute('INSERT INTO users(email) VALUES (%s) RETURNING *',
+                (email,))
+        new_created_user = cursor.fetchone()
+        print(new_created_user)
 
-        except:
-            return jsonify({'message': 'Bad request'}), 404
+        connection.commit()
+        cursor.close()
+        connection.close()
+
+        payload = {
+            'email': email
+        }
+        token = jwt.encode(payload, 'chatsavvy_secret', algorithm='HS256')
+        
+        return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
+
+    except Exception as e:
+        print("error:", str(e))
+        return jsonify({'message': 'Bad request'}), 404
 
 @app.post('/api/newChat')
 def api_newChat():
