@@ -5,7 +5,7 @@ import time
 import hashlib
 from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory
 from flask_cors import CORS
-from ask import ask_ai, delete_data_collection, delete_collection
+from ask import delete_data_collection, delete_collection
 from psycopg2 import connect, extras
 from os import environ
 import json
@@ -18,8 +18,26 @@ from dateutil.relativedelta import relativedelta
 import jwt
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
+import re
+
+from dotenv import load_dotenv
+
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import Chroma
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.document_loaders import PyPDFLoader, TextLoader
+from langchain.chains import ConversationalRetrievalChain
+from langchain.document_loaders import DirectoryLoader
+from langchain.chat_models import ChatOpenAI
+from langchain.callbacks import get_openai_callback
+from langchain.memory import ConversationBufferMemory
 
 app = Flask(__name__, static_folder='build')
+
+load_dotenv()
+
+if environ.get('OPENAI_API_KEY') is not None:
+    os.environ["OPENAI_API_KEY"] = environ.get('OPENAI_API_KEY')
 
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
@@ -149,7 +167,58 @@ async def api_ask():
         print("query=", query)
         print("bot_id=", bot_id)
         print('data_directory = ', data_directory)
-        response = await ask_ai(query, data_directory, email, bot_id)
+        loader = DirectoryLoader(data_directory, glob="./*.txt", loader_cls=TextLoader)
+        documents = loader.load()
+        print("documents = ", documents)
+
+        embeddings = OpenAIEmbeddings()
+        vectorstore = Chroma.from_documents(documents, embeddings)
+        print("embedding = ",embeddings)
+        memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+        retriever_openai = vectorstore.as_retriever(search_kwargs={"k": 3})
+        #create the chain/Screen Shot 2023-05-26 at 9.58.31 AM.png
+        llm = ChatOpenAI(model_name='gpt-3.5-turbo', temperature=0.2) 
+        qa = ConversationalRetrievalChain.from_llm(llm, retriever_openai, memory=memory)
+        print("qa = ", qa)
+        #test a message and log cost of API call
+
+        with get_openai_callback() as cb:
+            result = qa({"question": query})
+            print(cb)
+
+        print(result)
+
+        print(result['answer'])
+
+        text = result['answer']
+
+        # Check if the response contains a link
+        url_pattern = re.compile(r"(?P<url>https?://[^\s]+)")
+
+        # replace URLs with anchor tags in the text
+        response = url_pattern.sub(
+            r"<a href='\g<url>' target='_blank' style='color: #0000FF'>\g<url></a>", text)
+
+        newMessage = {
+            "question": query,
+            "answer": response
+        }
+
+        connection = get_connection()
+        cur = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cur.execute(
+            'SELECT * FROM chats WHERE email = %s AND bot_id = %s', (email, bot_id))
+        chat = cur.fetchone()
+        chat_content = chat['chats']
+        chat_content.append(newMessage)
+        print(chat_content)
+        updated_json_data_string = json.dumps(chat_content)
+        cur.execute("UPDATE chats SET chats = %s WHERE email = %s AND bot_id = %s",
+                    (updated_json_data_string, email, bot_id))
+        connection.commit()
+        cur.close()
+        connection.close()
+
         app.logger.debug(f"Query: {query}")
         app.logger.debug(f"Response: {response}")
         print("response:", response)
