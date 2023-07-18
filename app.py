@@ -12,17 +12,19 @@ from os import environ
 import json
 import shutil
 import stripe
-import datetime
+from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
-
+import jwt
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 app = Flask(__name__, static_folder='build')
-# CORS(app, resources={r"/api/*": {"origins": "https://1a78-65-109-52-221.ngrok-free.app/"}})
+
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 os.makedirs("data", exist_ok=True)
 
 stripe.api_key = 'pk_test_51N8ikXCRd8rWbf0guJ5xqIR6c1Ya13PexdGenYTrru60C7nVLWrLxgX61ZAe55cDf53JmMKlurnS0Fb3GvIhIbfq00Su2SqotR'
-
 
 # endpoint_secret = 'whsec_ef236d754b0c2badbd37c064994eddfa7a630c790b8407b1395cd8727f4fee6a'
 endpoint_secret = 'whsec_aL0kutS9p1MkhhKXN8GkTnHoz7WnPXfj'
@@ -35,7 +37,6 @@ dbname = environ.get('DB_NAME')
 user = environ.get('DB_USER')
 password = environ.get('DB_PASSWORD')
 
-
 def get_connection():
     conection = connect(host=host,
                         port=port,
@@ -44,18 +45,11 @@ def get_connection():
                         password=password)
     return conection
 
-@app.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
-    return response
-
 @app.post("/api/addData")
 def index():
     requestInfo = request.get_json()
     print(requestInfo)
-    user_email = requestInfo['user_email']
+    user_email = requestInfo['email']
     urls_input = requestInfo["urls_input"]
     bot_id = requestInfo['bot_id']
     urls = [url.strip() for url in urls_input.split(",")]
@@ -148,7 +142,7 @@ def scrape_urls(urls, root_url, user_email, bot_id):
 async def api_ask():
     requestInfo = request.get_json()
     print(requestInfo)
-    user_email = requestInfo['user_email']
+    user_email = requestInfo['email']
     bot_id = requestInfo['bot_id']
     
     user_email_hash = create_hash(user_email)
@@ -169,7 +163,7 @@ async def api_ask():
 def api_chats_delte():
     requestInfo = request.get_json()
     print(requestInfo)
-    user_email = requestInfo['user_email']
+    user_email = requestInfo['email']
     bot_id = requestInfo['bot_id']
     response = delete_data_collection(user_email, bot_id)
     return response
@@ -178,120 +172,38 @@ def api_chats_delte():
 def api_bot_delete():
     requestInfo = request.get_json()
     print(requestInfo)
-    email = requestInfo['user_email']
+    auth_email = requestInfo['email']
     bot_id = requestInfo['bot_id']
-    if email == '' or bot_id == '':
-        return {}
-    else:
-        try:
-            connection = get_connection()
-            cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
-            cursor.execute('DELETE FROM chats WHERE email = %s AND bot_id = %s',
-                                (email, bot_id))            
-            connection.commit()
-            cursor.close()
-            connection.close()
-            user_email_hash = create_hash(email)
-            data_directory = f"data/{user_email_hash}/{bot_id}"
-            shutil.rmtree(data_directory)
-            return "ok"
-        except Exception as e:
-            print('Error: ' + str(e))
-            return "ok"
+    headers = request.headers
+    bearer = headers.get('Authorization')
+    try:
+        token = bearer.split()[1]
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
 
-@app.post('/api/auth/register')
-def api_auth_register():
-    print('----register----')
-    requestInfo = request.get_json()
-    email = requestInfo['user_email']
-    password = requestInfo['user_password']
-    if email == '' or password == '':
-        return {}
-    else:
+        email = decoded['email']
+
+        if(email != auth_email):
+            return jsonify({'message': 'Authrization is faild'}), 404
+
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
-
-        try:
-            hash_password = create_hash(password)
-            cursor.execute('INSERT INTO users(email,password) VALUES (%s, %s) RETURNING *',
-                        (email, hash_password))
-            new_created_user = cursor.fetchone()
-            print(new_created_user)
-
-            connection.commit()
-            cursor.close()
-            connection.close()
-
-            if new_created_user is None:
-                print(new_created_user)
-                return jsonify({'message': 'Email already exist'}), 404
-            return new_created_user
-        except:
-            return jsonify({'message': 'Email already exist'}), 404
-
-@app.post('/api/auth/googleRegister')
-def api_auth_google_register():
-    print('----register----')
-    requestInfo = request.get_json()
-    email = requestInfo['user_email']
-    if email == '':
-        return {}
-    else:
-        connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
-
-        try:
-            hash_password = create_hash('rmeosmsdjajslrmeosmsdjajsl')
-            cursor.execute('INSERT INTO users(email,password) VALUES (%s, %s) RETURNING *',
-                        (email, hash_password))
-            new_created_user = cursor.fetchone()
-            print(new_created_user)
-
-            connection.commit()
-            cursor.close()
-            connection.close()
-
-            if new_created_user is None:
-                print(new_created_user)
-                return jsonify({'message': 'Email already exist'}), 404
-            return "ok"
-        except:
-            return jsonify({'message': 'Email already exist'}), 404
-
-@app.post('/api/auth/login')
-def api_auth_login():
-    requestInfo = request.get_json()
-    email = requestInfo['user_email']
-    password = requestInfo['user_password']
-    if email == '' or password == '':
-        return {}
-    else:
-        connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
-
-        try:
-            hash_password = create_hash(password)
-            print(hash_password)
-            print(email)
-            cursor.execute('SELECT * FROM users WHERE email = %s AND password = %s', (email,hash_password))
-            user = cursor.fetchone()
-            print("user-------", user)
-            connection.commit()
-            cursor.close()
-            connection.close()
-
-            
-            if user is None:
-                print(user)
-                return jsonify({'message': 'Email or Password does not correct'}), 404
-            return user
-        except:
-            return jsonify({'message': 'Email or Password does not correct'}), 404
+        cursor.execute('DELETE FROM chats WHERE email = %s AND bot_id = %s',
+                            (email, bot_id))            
+        connection.commit()
+        cursor.close()
+        connection.close()
+        user_email_hash = create_hash(email)
+        data_directory = f"data/{user_email_hash}/{bot_id}"
+        shutil.rmtree(data_directory)
+        return jsonify({'message': 'Chatbot Deleted'}), 200
+    except Exception as e:
+        print('Error: ' + str(e))
+        return jsonify({'message': 'bad request'}), 404
 
 @app.post('/api/auth/googleLogin')
 def api_auth_googleLogin():
     requestInfo = request.get_json()
-    email = requestInfo['user_email']
+    email = requestInfo['email']
     if email == '':
         return {}
     else:
@@ -318,7 +230,7 @@ def api_auth_googleLogin():
 @app.post('/api/newChat')
 def api_newChat():
     requestInfo = request.get_json()
-    email = requestInfo['user_email']
+    email = requestInfo['email']
     instance_name = requestInfo['instace_name']
     bot_id = requestInfo['bot_id']
     urls_input = requestInfo['urls_input']
@@ -377,7 +289,7 @@ def api_newChat():
 @app.post('/api/updateChat')
 def api_updateChat():
     requestInfo = request.get_json()
-    email = requestInfo['user_email']
+    email = requestInfo['email']
     instance_name = requestInfo['instance_name']
     bot_id = requestInfo['bot_id']
     urls_input = requestInfo['urls_input']
@@ -419,11 +331,18 @@ def api_updateChat():
 @app.post('/api/getChatInfos')
 def api_getChatInfos():
     requestInfo = request.get_json()
-    email = requestInfo['user_email']
-    print("email = ",email)
-    if email == "":
-        return jsonify({'message': 'email does not exist'}), 404
-    else: 
+    auth_email = requestInfo['email']
+    headers = request.headers
+    bearer = headers.get('Authorization')
+    print("bearer = ", bearer)
+    try:
+        token = bearer.split()[1]
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
+
+        email = decoded['email']
+
+        if(email != auth_email):
+            return jsonify({'message': 'Authrization is faild'}), 404
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
 
@@ -439,7 +358,10 @@ def api_getChatInfos():
         except Exception as e:
             print('Error: '+ str(e))
             return jsonify({'message': 'chat does not exist'}), 404
- 
+    except Exception as e:
+        print('Error: '+ str(e))
+        return jsonify({'message': 'bad request'}), 404
+
 @app.post('/api/webhook')
 def api_webhook():
     event = None
@@ -507,10 +429,18 @@ def api_webhook():
 @app.post('/api/getSubscription')
 def api_getSubscription():
     requestInfo = request.get_json()
-    email = requestInfo['user_email']
-    if email == '':
-        return jsonify({'customerId': '','count':'1'})
-    else:
+    auth_email = requestInfo['email']
+    headers = request.headers
+    bearer = headers.get('Authorization')
+    try:
+        token = bearer.split()[1]
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
+
+        email = decoded['email']
+
+        if(email != auth_email):
+            return jsonify({'message': 'Authrization is faild'}), 404
+        
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         # try:
@@ -543,11 +473,14 @@ def api_getSubscription():
                 cursor.close()
                 connection.close()
                 return jsonify({'customerId': subscription['customer_id'],'count':'1'})
+    except Exception as e:
+        print('Error: '+ str(e))
+        return jsonify({'message': 'bad request'}), 404
 
 @app.post('/api/unSubscribe')
 def api_unsubscribe():
     requestInfo = request.get_json()
-    email = requestInfo['user_email']
+    email = requestInfo['email']
     if email == '':
         return "ok"
     else:
@@ -571,12 +504,112 @@ def api_unsubscribe():
 def create_hash(text):
     return hashlib.md5(text.encode()).hexdigest()
 
+@app.post('/api/sendVerifyEmail')
+def api_sendVerifyEmail():
+    requestInfo = request.get_json()
+    email = requestInfo['email']
+
+    # Set an expiration time of 24 hours from now
+    expiry_time = datetime.utcnow() + timedelta(hours=1)
+
+    payload = {
+            'email': email,
+            'expired_time': expiry_time.isoformat()
+        }
+    token = jwt.encode(payload, 'chatsavvy_secret', algorithm='HS256')
+    print("token = ", token)
+    message = Mail(
+        from_email='admin@beyondreach.ai',
+        to_emails=email,
+        subject='Sign in to Chatsavvy',
+        html_content = f'<p style="color: #500050;">Hello<br/><br/>We received a request to sign in to Beyondreach using this email address {email}. If you want to sign in to your BeyondReach account, click this link:<br/><br/><a href="http://localhost:3000/#/verify/{token}">Sign in to BeyondReach</a><br/><br/>If you did not request this link, you can safely ignore this email.<br/><br/>Thanks.<br/><br/>Your Beyondreach team.</p>'
+    )
+    try:
+        sg = SendGridAPIClient(api_key=environ.get('SENDGRID_API_KEY'))
+        # response = sg.send(message)
+        sg.send(message)
+        return jsonify({'status': True}), 200
+    except Exception as e:
+        return jsonify({'status':False}), 404
+    
+@app.post('/api/verify/<token>')
+def verify_token(token):
+    print("token = ",token)
+    try:
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
+
+        email = decoded['email']
+        expired_time = datetime.fromisoformat(decoded['expired_time'])
+
+        print('expired_time:', expired_time)
+        print('utc_time:', datetime.utcnow())
+        if expired_time < datetime.utcnow():
+            return  jsonify({'message': 'Expired time out'}), 404
+        
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+
+        cursor.execute('SELECT * FROM users WHERE email = %s', (email, ))
+        user = cursor.fetchone()
+        print('user = ', user)
+        if user is not None:
+            payload = {
+                'email': email
+            }
+            token = jwt.encode(payload, 'chatsavvy_secret', algorithm='HS256')
+            return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
+
+        cursor.execute('INSERT INTO users(email) VALUES (%s) RETURNING *',
+                    (email))
+        new_created_user = cursor.fetchone()
+        print(new_created_user)
+
+        connection.commit()
+        
+
+        payload = {
+            'email': email
+        }
+        token = jwt.encode(payload, 'chatsavvy_secret', algorithm='HS256')
+
+        cursor.close()
+        connection.close()
+        return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
+
+    except:
+        return jsonify({'message': 'Email already exist'}), 404
+
+@app.post('/api/auth/loginCheck')
+def api_loginCheck():
+    requestInfo = request.get_json()
+    auth_email = requestInfo['email']
+    headers = request.headers
+    bearer = headers.get('Authorization')
+    try:
+        token = bearer.split()[1]
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
+
+        email = decoded['email']
+
+        if(email != auth_email):
+            return jsonify({'authentication': False}), 404
+
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+    
+        cursor.execute('SELECT * FROM users WHERE email = %s', (email, ))
+        user = cursor.fetchone()
+
+        if user is not None:
+            return jsonify({'authentication': True}), 200
+        else: return jsonify({'authentication': False}), 404
+    except: 
+        return jsonify({'authentication': False}), 404
+
 # Serve REACT static files
 @app.route('/', methods=['GET'])
 def run():
     return 'server is running'
-
-
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000,debug=True, threaded=True)
