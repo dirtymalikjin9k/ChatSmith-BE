@@ -1,4 +1,3 @@
-import chromadb
 import os
 from psycopg2 import connect, extras
 import re
@@ -21,8 +20,6 @@ load_dotenv()
 
 if environ.get('OPENAI_API_KEY') is not None:
     os.environ["OPENAI_API_KEY"] = environ.get('OPENAI_API_KEY')
-
-chroma_client = chromadb.Client()
 
 host = environ.get('DB_HOST')
 port = environ.get('DB_PORT')
