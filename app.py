@@ -143,7 +143,7 @@ def scrape_urls(urls, root_url, user_email, bot_id):
     return 
 
 @app.post('/api/chat')
-async def api_ask():
+def api_ask():
     requestInfo = request.get_json()
     auth_email = requestInfo['email']
     bot_id = requestInfo['bot_id']
