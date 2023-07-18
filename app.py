@@ -125,7 +125,7 @@ def scrape_urls(urls, root_url, user_email, bot_id):
     return 
 
 @app.post('/api/chat')
-def api_ask():
+async def api_ask():
     requestInfo = request.get_json()
     auth_email = requestInfo['email']
     bot_id = requestInfo['bot_id']
@@ -149,7 +149,7 @@ def api_ask():
         print("query=", query)
         print("bot_id=", bot_id)
         print('data_directory = ', data_directory)
-        response = ask_ai(query, data_directory, email, bot_id)
+        response = await ask_ai(query, data_directory, email, bot_id)
         app.logger.debug(f"Query: {query}")
         app.logger.debug(f"Response: {response}")
         print("response:", response)
