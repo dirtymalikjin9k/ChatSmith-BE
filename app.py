@@ -1,3 +1,4 @@
+import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import os
@@ -13,7 +14,7 @@ import shutil
 import stripe
 from datetime import datetime, timedelta
 from google.oauth2 import id_token
-from google.auth.transport import requests
+from google.auth.transport import requests as google_requests
 from dateutil.relativedelta import relativedelta
 import jwt
 from sendgrid import SendGridAPIClient
@@ -30,7 +31,10 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.document_loaders import DirectoryLoader
 from langchain.chat_models import ChatOpenAI
 from langchain.callbacks import get_openai_callback
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationSummaryBufferMemory
+from langchain.llms import OpenAI
+from langchain.chains.question_answering import load_qa_chain
+from langchain.prompts import PromptTemplate
 
 app = Flask(__name__, static_folder='build')
 
@@ -74,8 +78,8 @@ def scrape_urls(urls, root_url, user_email, bot_id):
 
     print(urls)
 
-    for url in urls:
-        try:
+    try:
+        for url in urls:
             time.sleep(5)
             print(url)
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
@@ -137,10 +141,9 @@ def scrape_urls(urls, root_url, user_email, bot_id):
                         unique_urls.add(url)
                         f.write(f"{url}\n")
                 f.write("\n")
-        except Exception as e:
-            print("error:",str(e))
-            return 
-    return 
+    except Exception as e:
+        print('Error: '+ str(e))
+        return 
 
 @app.post('/api/chat')
 def api_ask():
@@ -149,6 +152,7 @@ def api_ask():
     bot_id = requestInfo['bot_id']
     headers = request.headers
     bearer = headers.get('Authorization')
+    query = request.json['message_text']
 
     try:
         token = bearer.split()[1]
@@ -162,8 +166,6 @@ def api_ask():
         user_email_hash = create_hash(email)
         print(user_email_hash)
         data_directory = f"data//{user_email_hash}//{bot_id}"
-
-        query = request.json['message_text']
         print("query=", query)
         print("bot_id=", bot_id)
         print('data_directory = ', data_directory)
@@ -171,26 +173,49 @@ def api_ask():
         documents = loader.load()
         print("documents = ", documents)
 
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=30)
+
+        texts = text_splitter.split_documents(documents)
+
         embeddings = OpenAIEmbeddings()
-        vectorstore = Chroma.from_documents(documents, embeddings)
+        docsearch = Chroma.from_documents(texts, embeddings, metadatas=[{"source": i} for i in range(len(texts))])
         print("embedding = ",embeddings)
-        memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-        retriever_openai = vectorstore.as_retriever(search_kwargs={"k": 3})
-        #create the chain/Screen Shot 2023-05-26 at 9.58.31 AM.png
-        llm = ChatOpenAI(model_name='gpt-3.5-turbo', temperature=0.2) 
-        qa = ConversationalRetrievalChain.from_llm(llm, retriever_openai, memory=memory)
-        print("qa = ", qa)
+
+        connection = get_connection()
+        cur = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cur.execute(
+            'SELECT * FROM chats WHERE email = %s AND bot_id = %s', (email, bot_id))
+        chat = cur.fetchone()
+        bot_prompt = chat['bot_prompt']
+        
+        template = bot_prompt + """
+        {context}
+
+        {chat_history}
+
+        Human: {human_input}
+        Chatbot: """
+
+
+        prompt = PromptTemplate(
+            template=template,
+            input_variables=["chat_history", "human_input", "context"]
+            )
+        
+        llm = OpenAI(model_name='gpt-3.5-turbo',
+                temperature=0)
+        
+        memory = ConversationSummaryBufferMemory(llm=llm, max_token_limit=1500, memory_key="chat_history", input_key="human_input")
+        conversation_chain = load_qa_chain(llm=llm, chain_type="stuff", memory=memory, prompt=prompt)
+
         #test a message and log cost of API call
 
         with get_openai_callback() as cb:
-            result = qa({"question": query})
-            print(cb)
+            docs = docsearch.similarity_search(query)
+            conversation_chain({"input_documents": docs, "human_input": query}, return_only_outputs=True)
+            text = conversation_chain.memory.buffer[-1].content
 
-        print(result)
-
-        print(result['answer'])
-
-        text = result['answer']
+        print("text = ", text)
 
         # Check if the response contains a link
         url_pattern = re.compile(r"(?P<url>https?://[^\s]+)")
@@ -204,7 +229,6 @@ def api_ask():
             "answer": response
         }
 
-        connection = get_connection()
         cur = connection.cursor(cursor_factory=extras.RealDictCursor)
         cur.execute(
             'SELECT * FROM chats WHERE email = %s AND bot_id = %s', (email, bot_id))
@@ -290,7 +314,7 @@ def verify_google_token(token):
 
     try:
         # Verify and decode the token
-        decoded_token = id_token.verify_oauth2_token(token, requests.Request(), CLIENT_ID)
+        decoded_token = id_token.verify_oauth2_token(token, google_requests.Request(), CLIENT_ID)
 
         # Extract information from the decoded token
         user_id = decoded_token['sub']
@@ -362,12 +386,15 @@ def api_newChat():
     instance_name = requestInfo['instace_name']
     bot_id = requestInfo['bot_id']
     urls_input = requestInfo['urls_input']
+    bot_prompt = requestInfo['bot_prompt']
     chats = [{
         "question": "",
         "answer": ""
     }]
 
     print("urls_input = ", urls_input)
+
+    default_bot_prompt = "Your name is Ezjobs ChatBot and you are a very enthusiastic representative of the following website information who loves to help people! You are a live chat ai on this website and people are communicating with you there. Given the following sections of the website, answer the question using only that information and provide a link at the end of your response to a page when it's appropriate. Limit your responses to 50 words. If the topic is unrealted, respond with 'I'm not sure. Can you be more specifc or ask me in a different way?'"
 
     headers = request.headers
     bearer = headers.get('Authorization')
@@ -380,11 +407,14 @@ def api_newChat():
         if(email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
 
+        if bot_prompt == "":
+            bot_prompt = default_bot_prompt
+
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         chats_str = json.dumps(chats)
-        cursor.execute('INSERT INTO chats (email, instance_name, urls, bot_id, chats, complete) VALUES (%s, %s, %s, %s, %s, %s) RETURNING *',
-                    (email, instance_name, urls_input, bot_id, chats_str, 'false'))
+        cursor.execute('INSERT INTO chats (email, instance_name, urls, bot_prompt, bot_id, chats, complete) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *',
+                    (email, instance_name, urls_input, bot_prompt, bot_id, chats_str, 'false'))
         new_created_chat = cursor.fetchone()
         connection.commit()
         print(new_created_chat)
@@ -427,6 +457,7 @@ def api_updateChat():
     instance_name = requestInfo['instance_name']
     bot_id = requestInfo['bot_id']
     urls_input = requestInfo['urls_input']
+    bot_prompt = requestInfo['prompt']
     custom_text = requestInfo['custom_text']
     headers = request.headers
     bearer = headers.get('Authorization')
@@ -446,8 +477,8 @@ def api_updateChat():
         shutil.rmtree(data_directory)
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
-        cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
-                (instance_name, urls_input, custom_text, 'false', email, bot_id))
+        cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
+                (instance_name, urls_input, bot_prompt, custom_text, 'false', email, bot_id))
         connection.commit()
 
 
@@ -458,14 +489,14 @@ def api_updateChat():
             filename = f"{data_directory}/custom_text.txt"
             with open(filename, "w") as file:
                 file.write(custom_text)
-        response = delete_data_collection(email, bot_id)
-        cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
-                (instance_name, urls_input, custom_text, 'true', email, bot_id))
+        delete_data_collection(email, bot_id)
+        cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
+                (instance_name, urls_input, bot_prompt, custom_text, 'true', email, bot_id))
         connection.commit()
         cursor.close()
         connection.close()
 
-        return jsonify({'message': 'Update Success'}), 404
+        return jsonify({'message': 'Update Success'}), 200
     except Exception as e:
         print('Error: '+ str(e))
         return jsonify({'message': 'Bad Request'}), 404
@@ -664,7 +695,7 @@ def api_sendVerifyEmail():
         from_email='admin@beyondreach.ai',
         to_emails=email,
         subject='Sign in to Chatsavvy',
-        html_content = f'<p style="color: #500050;">Hello<br/><br/>We received a request to sign in to Beyondreach using this email address {email}. If you want to sign in to your BeyondReach account, click this link:<br/><br/><a href="https://app.chatsavvy.ai/#/verify/{token}">Sign in to BeyondReach</a><br/><br/>If you did not request this link, you can safely ignore this email.<br/><br/>Thanks.<br/><br/>Your Beyondreach team.</p>'
+        html_content = f'<p style="color: #500050;">Hello<br/><br/>We received a request to sign in to Chatsavvy using this email address {email}. If you want to sign in to your Chatsavvy account, click this link:<br/><br/><a href="https://app.chatsavvy.ai/#/verify/{token}">Sign in to Chatsavvy</a><br/><br/>If you did not request this link, you can safely ignore this email.<br/><br/>Thanks.<br/><br/>Your Chatsavvy team.</p>'
     )
     try:
         sg = SendGridAPIClient(api_key=environ.get('SENDGRID_API_KEY'))

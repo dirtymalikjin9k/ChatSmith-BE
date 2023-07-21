@@ -13,6 +13,7 @@ query = """
         email VARCHAR(150) NOT NULL,
         instance_name VARCHAR(150) NOT NULL,
         urls TEXT NOT NULL,
+        bot_prompt TEXT,
         custom_text TEXT,
         bot_id INTEGER NOT NULL,
         chats JSONB NOT NULL,
