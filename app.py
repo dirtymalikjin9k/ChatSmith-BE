@@ -4,7 +4,7 @@ from urllib.parse import urljoin
 import os
 import time
 import hashlib
-from flask import Flask, render_template, request, redirect, url_for, jsonify, send_from_directory
+from flask import Flask, flash, render_template, request, redirect, url_for, jsonify, send_from_directory
 from flask_cors import CORS
 from ask import delete_data_collection, delete_collection
 from psycopg2 import connect, extras
@@ -20,7 +20,8 @@ import jwt
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 import re
-
+from werkzeug.utils import secure_filename
+import pickle
 from dotenv import load_dotenv
 
 from langchain.embeddings import OpenAIEmbeddings
@@ -31,10 +32,11 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.document_loaders import DirectoryLoader
 from langchain.chat_models import ChatOpenAI
 from langchain.callbacks import get_openai_callback
-from langchain.memory import ConversationSummaryBufferMemory
+from langchain.memory import ConversationTokenBufferMemory
 from langchain.llms import OpenAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
+import chromadb
 
 app = Flask(__name__, static_folder='build')
 
@@ -47,10 +49,10 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 os.makedirs("data", exist_ok=True)
 
-stripe.api_key = 'pk_test_51N8ikXCRd8rWbf0guJ5xqIR6c1Ya13PexdGenYTrru60C7nVLWrLxgX61ZAe55cDf53JmMKlurnS0Fb3GvIhIbfq00Su2SqotR'
+stripe.api_key = environ.get('STRIPE_API_KEY')
 
 # endpoint_secret = 'whsec_ef236d754b0c2badbd37c064994eddfa7a630c790b8407b1395cd8727f4fee6a'
-endpoint_secret = 'whsec_aL0kutS9p1MkhhKXN8GkTnHoz7WnPXfj'
+endpoint_secret = environ.get('END_POINT_SECRET')
 
 all_urls = set()
 
@@ -145,6 +147,17 @@ def scrape_urls(urls, root_url, user_email, bot_id):
         print('Error: '+ str(e))
         return 
 
+def check_for_pdf_files(folder_path):
+    if not os.path.exists(folder_path):
+        return False
+
+    pdf_files = [file for file in os.listdir(folder_path) if file.lower().endswith('.pdf')]
+
+    if pdf_files:
+        return True
+    else:
+        return False
+
 @app.post('/api/chat')
 def api_ask():
     requestInfo = request.get_json()
@@ -169,23 +182,37 @@ def api_ask():
         print("query=", query)
         print("bot_id=", bot_id)
         print('data_directory = ', data_directory)
-        loader = DirectoryLoader(data_directory, glob="./*.txt", loader_cls=TextLoader)
-        documents = loader.load()
-        print("documents = ", documents)
+        txt_loader = DirectoryLoader(data_directory, glob="./*.txt", loader_cls=TextLoader)
+        print("check_pdf_files = ",check_for_pdf_files(data_directory))
+        if check_for_pdf_files(data_directory):
+            print("check_for_pdf_files = ", check_for_pdf_files(data_directory))
+            pdf_loader = DirectoryLoader(data_directory, glob="./*.pdf", loader_cls=PyPDFLoader)
+            documents = pdf_loader.load() + txt_loader.load()
+        else: documents = txt_loader.load()
+        # documents = txt_loader.load()
+        # print("txt_documents = ", len(txt_loader.load()))
+        print("documents = ", len(documents))
 
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=30)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=50)
 
         texts = text_splitter.split_documents(documents)
 
         embeddings = OpenAIEmbeddings()
-        docsearch = Chroma.from_documents(texts, embeddings, metadatas=[{"source": i} for i in range(len(texts))])
-        print("embedding = ",embeddings)
+        new_client = chromadb.PersistentClient()
+        print("emebdingCount", embeddings)
+        # persistent_client = chromadb.PersistentClient()
+        # persistent_client.create_collection(str(create_hash(email)+str(bot_id)))
+        
+        new_client.get_or_create_collection(str(create_hash(email)+str(bot_id)))
+
+        docsearch = Chroma.from_documents(texts, embeddings, client=new_client, collection_name=str(create_hash(email)+str(bot_id)))
+        # print("embedding = ",embeddings)
 
         connection = get_connection()
-        cur = connection.cursor(cursor_factory=extras.RealDictCursor)
-        cur.execute(
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor.execute(
             'SELECT * FROM chats WHERE email = %s AND bot_id = %s', (email, bot_id))
-        chat = cur.fetchone()
+        chat = cursor.fetchone()
         bot_prompt = chat['bot_prompt']
         
         template = bot_prompt + """
@@ -196,34 +223,64 @@ def api_ask():
         Human: {human_input}
         Chatbot: """
 
+        # template = """ Your name is Smith and you are a very enthusiastic expert of the following information who loves to help people! You are a live chat agent for this company and people are communicating with you there. Your job is to answer their questions and direct them to the correct page on the website to find the information they're looking for. Answer the human's question using only the information provided and give a link at the end of your response to a page where they can find more information for what they're looking for. Only give links to pages you find in the context. do not use [] to describe the link. Limit your responses to 50 words. Do not answer questions unrelated to the context provided.
+
+        # {context}
+
+        # {chat_history}
+        # Human: {human_input}
+        # Chatbot:"""
 
         prompt = PromptTemplate(
-            template=template,
-            input_variables=["chat_history", "human_input", "context"]
+            input_variables=["chat_history", "human_input", "context"],
+            template=template
             )
         
-        llm = OpenAI(model_name='gpt-3.5-turbo',
-                temperature=0)
+        llm = OpenAI(model_name='gpt-3.5-turbo-16k',
+            temperature=0.0,
+            max_tokens=8000,
+            )
         
-        memory = ConversationSummaryBufferMemory(llm=llm, max_token_limit=1500, memory_key="chat_history", input_key="human_input")
-        conversation_chain = load_qa_chain(llm=llm, chain_type="stuff", memory=memory, prompt=prompt)
 
-        #test a message and log cost of API call
+        memory = ConversationTokenBufferMemory(llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
+        cursor.execute(
+            'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
+        chain = cursor.fetchone()
+        print("chain ==", chain)
+        connection.commit()
+        if chain is None:
+            conversation_chain = load_qa_chain(llm=llm, chain_type="stuff", memory=memory, prompt=prompt)
+        else:
+            chain_memory = chain['chain']
+            exist_conversation_chain = pickle.loads(bytes(chain_memory))
+            conversation_chain = load_qa_chain(llm=llm, chain_type="stuff", memory=exist_conversation_chain.memory, prompt=prompt)
 
         with get_openai_callback() as cb:
+            # query = "Do you know about grillgrate?"
+            print("query ====", query)
             docs = docsearch.similarity_search(query)
             conversation_chain({"input_documents": docs, "human_input": query}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
-
+            print("cb ===== ",cb)
+        memory.load_memory_variables({})
+        new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         print("text = ", text)
-
+        new_chain = pickle.dumps(conversation_chain)
+        if chain is None:
+            cursor.execute('INSERT INTO botchain(email, botid, chain) VALUES (%s, %s, %s) RETURNING *',
+                        (email, bot_id, new_chain))
+        else:
+            cursor.execute('UPDATE botchain SET chain = %s WHERE email = %s AND botid = %s', (new_chain, email, bot_id, ))
+        connection.commit()
         # Check if the response contains a link
         url_pattern = re.compile(r"(?P<url>https?://[^\s]+)")
 
         # replace URLs with anchor tags in the text
         response = url_pattern.sub(
             r"<a href='\g<url>' target='_blank' style='color: #0000FF'>\g<url></a>", text)
-
+        response = response.replace("[", "").replace("]", "")
+        response = response.replace("(", "").replace(")", "")
+        response = response.rstrip(".")
         newMessage = {
             "question": query,
             "answer": response
@@ -235,7 +292,7 @@ def api_ask():
         chat = cur.fetchone()
         chat_content = chat['chats']
         chat_content.append(newMessage)
-        print(chat_content)
+        # print(chat_content)
         updated_json_data_string = json.dumps(chat_content)
         cur.execute("UPDATE chats SET chats = %s WHERE email = %s AND bot_id = %s",
                     (updated_json_data_string, email, bot_id))
@@ -245,6 +302,7 @@ def api_ask():
 
         app.logger.debug(f"Query: {query}")
         app.logger.debug(f"Response: {response}")
+        
         print("response:", response)
         return jsonify({'message': response}), 200
     except Exception as e:
@@ -267,7 +325,18 @@ def api_chats_delte():
 
         if(email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
+        new_client = chromadb.PersistentClient()
+        new_client.get_or_create_collection(str(create_hash(email)+str(bot_id)))
+        new_client.delete_collection(str(create_hash(email)+str(bot_id)))
+
         response = delete_data_collection(auth_email, bot_id)
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor.execute('DELETE FROM botchain WHERE email = %s AND botid = %s',
+                            (email, bot_id))            
+        connection.commit()
+        cursor.close()
+        connection.close()
         if response:
             return jsonify({'message': 'Delete Success'}), 200
         else:
@@ -292,17 +361,26 @@ def api_bot_delete():
 
         if(email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
+        new_client = chromadb.PersistentClient()
+        new_client.get_or_create_collection(str(create_hash(email)+str(bot_id)))
+        new_client.delete_collection(str(create_hash(email)+str(bot_id)))
 
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute('DELETE FROM chats WHERE email = %s AND bot_id = %s',
                             (email, bot_id))            
         connection.commit()
+
+        cursor.execute('DELETE FROM botchain WHERE email = %s AND botid = %s',
+                            (email, bot_id)) 
+        connection.commit()
+
         cursor.close()
         connection.close()
         user_email_hash = create_hash(email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
         shutil.rmtree(data_directory)
+        # Chroma.delete_collection(user_email_hash+str(bot_id))
         return jsonify({'message': 'Chatbot Deleted'}), 200
     except Exception as e:
         print('Error: ' + str(e))
@@ -310,23 +388,26 @@ def api_bot_delete():
 
 def verify_google_token(token):
     # Specify the client ID of the Google API Console project that the credential is from
-    CLIENT_ID = '241041186069-6655bsntan86u6hhf4h7t6897o2i4pn8.apps.googleusercontent.com'
+    CLIENT_ID = '241041186069-4k2k1pt0b20t1fs8q77nmnl3po9cr6ub.apps.googleusercontent.com'
 
     try:
         # Verify and decode the token
-        decoded_token = id_token.verify_oauth2_token(token, google_requests.Request(), CLIENT_ID)
+        # decoded_token = id_token.verify_oauth2_token(token, google_requests.Request(), CLIENT_ID)
+        url = 'https://www.googleapis.com/oauth2/v3/userinfo'
+        headers = {'Authorization': f'Bearer {token}'}
 
-        # Extract information from the decoded token
-        user_id = decoded_token['sub']
-        user_email = decoded_token['email']
-        user_name = decoded_token['name']
-        print("email == ", user_email)
-        # Return a dictionary containing the user information
-        return {
-            'id': user_id,
-            'email': user_email,
-            'name': user_name
-        }
+        response = requests.get(url, headers=headers)
+
+        if response.status_code == 200:
+            user_info = response.json()
+            print("user_info = ", user_info)
+            return user_info
+        else:
+            print(f"Error: {response.status_code}")
+            return None
+
+        # Assuming you have the access token in a variable called 'access_token'
+        
     except Exception as e:
         print("error:", str(e))
         # Handle invalid token error
@@ -394,7 +475,7 @@ def api_newChat():
 
     print("urls_input = ", urls_input)
 
-    default_bot_prompt = "Your name is Ezjobs ChatBot and you are a very enthusiastic representative of the following website information who loves to help people! You are a live chat ai on this website and people are communicating with you there. Given the following sections of the website, answer the question using only that information and provide a link at the end of your response to a page when it's appropriate. Limit your responses to 50 words. If the topic is unrealted, respond with 'I'm not sure. Can you be more specifc or ask me in a different way?'"
+    default_bot_prompt = "Your name is Smith and you are a very enthusiastic expert of the following information who loves to help people! You are a live chat agent for this company and people are communicating with you there. Your job is to answer their questions and direct them to the correct page on the website to find the information they're looking for. Answer the human's question using only the information provided and give a link at the end of your response to a page where they can find more information for what they're looking for. Limit your responses to 50 words. Do not answer questions unrelated to the context provided."
 
     headers = request.headers
     bearer = headers.get('Authorization')
@@ -428,8 +509,8 @@ def api_newChat():
         if(subscription is None):
             urls = urls[:2]
         else: 
-            end_time = datetime.datetime.fromtimestamp(int(subscription['end_date']))
-            current_time = datetime.datetime.now()
+            end_time = datetime.fromtimestamp(int(subscription['end_date']))
+            current_time = datetime.now()
             
             if(current_time > end_time):
                 urls = urls[:2]
@@ -450,18 +531,44 @@ def api_newChat():
         print('Error: '+ str(e))
         return jsonify({'message': 'Bad Request'}), 404
 
+ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def delete_text_files(directory):
+    for filename in os.listdir(directory):
+        filepath = os.path.join(directory, filename)
+        if os.path.isfile(filepath) and filename.endswith(".txt"):
+            os.remove(filepath)
+            print(f"Deleted: {filepath}")
+
 @app.post('/api/updateChat')
 def api_updateChat():
-    requestInfo = request.get_json()
-    auth_email = requestInfo['email']
-    instance_name = requestInfo['instance_name']
-    bot_id = requestInfo['bot_id']
-    urls_input = requestInfo['urls_input']
-    bot_prompt = requestInfo['prompt']
-    custom_text = requestInfo['custom_text']
+    auth_email = request.form.get('email')
+    instance_name = request.form.get('instance_name')
+    bot_id = request.form.get('bot_id')
+    urls_input = request.form.get('urls_input')
+    bot_prompt = request.form.get('prompt')
+    custom_text = request.form.get('custom_text')
+    remove_files = request.form.getlist('remove_files')
     headers = request.headers
     bearer = headers.get('Authorization')
+    print("request_data = ", auth_email)
+    files = request.files.getlist('files')
     print("bearer = ", bearer)
+    # if file.filename == '':
+    #     flash('No selected file')
+    #     return redirect(request.url)
+    # if file and allowed_file(file.filename):
+    #     filename = secure_filename(file.filename)
+    #     file.save('/data/0ccbde2fa87100168e416c899a4f598e/2', filename
+    user_email_hash = create_hash(auth_email)
+
+    print("bot_id ===== " , bot_id)
+    
+
     try:
         token = bearer.split()[1]
         decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
@@ -470,15 +577,44 @@ def api_updateChat():
 
         if(email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
-    
+        new_client = chromadb.PersistentClient()
+        new_client.get_or_create_collection(str(create_hash(email)+str(bot_id)))
+        new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         user_email_hash = create_hash(email)
-        print(user_email_hash)
+        print("file length = ", len(files))
         data_directory = f"data/{user_email_hash}/{bot_id}"
-        shutil.rmtree(data_directory)
+
+        if len(remove_files) > 0:
+            print("removeFiles ========", remove_files)
+            for remove_file in remove_files:
+                delete_pdf_files(data_directory, remove_file)
+
+        if len(files) > 0:
+            upload_files_size = 0
+
+            for file in files:
+                file.save(data_directory + "/" + file.filename)
+
+                upload_files_size += os.path.getsize(f"{data_directory}/{file.filename}")
+
+            print("uplad_files_size ============================ ", upload_files_size)
+            data_path = f"data/{user_email_hash}"
+            if upload_files_size + folder_size(data_path) > 10 * 1024 * 1024:
+                for file in files:
+                    os.remove(f"{data_directory}/{file.filename}")
+                return jsonify({'message': 'You can upload the files total 10MB'}), 404 
+
+        
+        delete_text_files(data_directory)
+        
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
                 (instance_name, urls_input, bot_prompt, custom_text, 'false', email, bot_id))
+        connection.commit()
+
+        cursor.execute('DELETE FROM botchain WHERE email = %s AND botid = %s',
+                            (email, bot_id))    
         connection.commit()
 
 
@@ -495,11 +631,12 @@ def api_updateChat():
         connection.commit()
         cursor.close()
         connection.close()
+        new_client.get_or_create_collection(str(create_hash(email)+str(bot_id)))
 
         return jsonify({'message': 'Update Success'}), 200
     except Exception as e:
         print('Error: '+ str(e))
-        return jsonify({'message': 'Bad Request'}), 404
+        # return jsonify({'message': 'Bad Request'}), 404
 
 @app.post('/api/getChatInfos')
 def api_getChatInfos():
@@ -554,10 +691,7 @@ def api_webhook():
      # Handle the event
     # print("event-----",event)
     charge = session = invoice = customer = None
-    if event['type'] == 'customer.created':
-      customer  = event['data']['object']
-      print("customer  = ",customer )
-    elif event['type'] == 'checkout.session.completed':
+    if event['type'] == 'checkout.session.completed':
       session = event['data']['object']
       print("session = ",session)
     elif event['type'] == 'charge.succeeded':
@@ -579,17 +713,13 @@ def api_webhook():
         email = invoice['customer_email']
         print("email = ", email)
         customer_id = invoice['customer']
+        subscription_id = invoice['subscription']
         print("customer_id = ", customer_id)
-        start_date = invoice['created']
-
-        date_obj = datetime.datetime.utcfromtimestamp(start_date)
-
-        end_date_obj = date_obj + relativedelta(months=1)
-
-        end_date = int(end_date_obj.timestamp())
+        start_date = invoice['lines']['data'][0]['period']['start']
+        end_date = invoice['lines']['data'][0]['period']['end']
         
-        cursor.execute('INSERT INTO subscription(email, customer_id, start_date, end_date) VALUES (%s, %s, %s, %s) RETURNING *',
-                    (email, customer_id, start_date, end_date))
+        cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date) VALUES (%s, %s, %s, %s, %s) RETURNING *',
+                    (email, customer_id, subscription_id, start_date, end_date))
         new_created_user = cursor.fetchone()
         print(new_created_user)
 
@@ -625,15 +755,15 @@ def api_getSubscription():
         print(selects)
         
         if(len(selects) == 0) :
-             return jsonify({'customerId': '','count':'1'})
+             return jsonify({'customerId': '', 'subscriptionId': '', 'count':'1'})
         else:
             subscription = selects[len(selects)-1]
             print("subscription = ", subscription)
-            end_time = datetime.datetime.fromtimestamp(int(subscription['end_date']))
-            current_time = datetime.datetime.now()
+            end_time = datetime.fromtimestamp(int(subscription['end_date']))
+            current_time = datetime.now()
             
             if end_time > current_time:
-                return jsonify({'customerId': subscription['customer_id'],'count':'10'})
+                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'count':'10'})
             else:
                 cursor.execute('DELETE FROM subscription WHERE email = %s ',
                                 (email, ))            
@@ -645,7 +775,10 @@ def api_getSubscription():
 
                 cursor.close()
                 connection.close()
-                return jsonify({'customerId': subscription['customer_id'],'count':'1'})
+                user_email_hash = create_hash(email)
+                data_directory = f"data/{user_email_hash}"
+                shutil.rmtree(data_directory)
+                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'count':'1'})
     except Exception as e:
         print('Error: '+ str(e))
         return jsonify({'message': 'bad request'}), 404
@@ -694,8 +827,8 @@ def api_sendVerifyEmail():
     message = Mail(
         from_email='admin@beyondreach.ai',
         to_emails=email,
-        subject='Sign in to Chatsavvy',
-        html_content = f'<p style="color: #500050;">Hello<br/><br/>We received a request to sign in to Chatsavvy using this email address {email}. If you want to sign in to your Chatsavvy account, click this link:<br/><br/><a href="https://app.chatsavvy.ai/#/verify/{token}">Sign in to Chatsavvy</a><br/><br/>If you did not request this link, you can safely ignore this email.<br/><br/>Thanks.<br/><br/>Your Chatsavvy team.</p>'
+        subject='Sign in to ChatSmith',
+        html_content = f'<p style="color: #500050;">Hello<br/><br/>We received a request to sign in to ChatSmith using this email address {email}. If you want to sign in to your ChatSmith account, click this link:<br/><br/><a href="https://app.chatsmith.ai/#/verify/{token}">Sign in to ChatSmith</a><br/><br/>If you did not request this link, you can safely ignore this email.<br/><br/>Thanks.<br/><br/>Your ChatSmith team.</p>'
     )
     try:
         sg = SendGridAPIClient(api_key=environ.get('SENDGRID_API_KEY'))
@@ -703,6 +836,7 @@ def api_sendVerifyEmail():
         sg.send(message)
         return jsonify({'status': True}), 200
     except Exception as e:
+        print("Error:",str(e))
         return jsonify({'status':False}), 404
     
 @app.post('/api/verify/<token>')
@@ -778,6 +912,352 @@ def api_loginCheck():
         else: return jsonify({'authentication': False}), 404
     except: 
         return jsonify({'authentication': False}), 404
+
+@app.post('/api/cancelSubscription')
+def cancelSubscription():
+    requestInfo = request.get_json()
+    auth_email = requestInfo['email']
+    customer_id = requestInfo['customer_id']
+    subscription_id = requestInfo['subscription_id']
+    headers = request.headers
+    bearer = headers.get('Authorization')
+    try:
+        token = bearer.split()[1]
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
+
+        email = decoded['email']
+
+        if(email != auth_email):
+            return jsonify({'authentication': False}), 404
+        
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+    
+        cursor.execute('DELETE FROM subscription WHERE email = %s AND customer_id = %s AND subscription_id = %s', (email, customer_id, subscription_id  ))
+        connection.commit()
+
+        cursor.execute('DELETE FROM chats WHERE email = %s', (email, ))
+        connection.commit()
+
+        cursor.close()
+        connection.close()
+        user_email_hash = create_hash(email)
+        data_directory = f"data/{user_email_hash}"
+        shutil.rmtree(data_directory)
+        return jsonify({'message': 'Success deleted'}), 200
+    except Exception as e:  
+        print("error:", str(e))
+        return jsonify({'message': 'Bad request'}), 404
+
+@app.post('/api/createEmbedScriptToken')
+def makeEmbedScriptToken():
+    requestInfo = request.get_json()
+    auth_email = requestInfo['email']
+    bot_id = requestInfo['bot_id']
+    
+    headers = request.headers
+    bearer = headers.get('Authorization')
+    try:
+        token = bearer.split()[1]
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
+
+        email = decoded['email']
+
+        if(email != auth_email):
+            return jsonify({'authentication': False}), 404
+        
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+    
+        cursor.execute(
+            'SELECT * FROM subscription WHERE email = %s ', (email, ))
+        subscription = cursor.fetchone()
+        connection.commit()
+
+        if subscription is None:
+            return jsonify({'message': 'Subscription does not exist'}), 404
+
+        end_time = datetime.fromtimestamp(int(subscription['end_date']))
+        current_time = datetime.now()
+        if end_time < current_time:
+            return jsonify({'message': 'Expired period'}), 404
+
+        payload = {
+            'email': email,
+            'bot_id': bot_id,
+            'customer_id': subscription['customer_id'],
+            'subscription_id': subscription['subscription_id'],
+        }
+        token = jwt.encode(payload, 'chatsavvy_secret', algorithm='HS256')
+
+        cursor.close()
+        connection.close()
+        return jsonify({'message': 'Success created', 'token': token}), 200
+    except Exception as e:  
+        print("error:", str(e))
+        return jsonify({'message': 'Bad request'}), 404
+    
+@app.post('/api/getEmbedChatBotInfo')
+def getEmbedChatBotInfo():
+    requestInfo = request.get_json()
+    token = requestInfo['token']
+    try:
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
+        print("decoded = ", decoded)
+        email = decoded['email']
+        subscription_id = decoded['subscription_id']
+        customer_id = decoded['customer_id']
+        bot_id = decoded['bot_id']
+
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+    
+        cursor.execute(
+            'SELECT * FROM subscription WHERE email = %s AND subscription_id = %s AND customer_id = %s', (email, subscription_id, customer_id ))
+        subscription = cursor.fetchone()
+        connection.commit()
+
+        if subscription is None:
+            return jsonify({'message': 'Subscription does not exist'}), 404
+        
+        cursor.execute(
+            'SELECT * FROM subscription WHERE email = %s AND subscription_id = %s AND customer_id = %s', (email, subscription_id, customer_id ))
+        subscription = cursor.fetchone()
+
+        cursor.execute('SELECT * FROM chats WHERE email = %s ', (email,))
+        chats = cursor.fetchall()
+
+        if chats is None:
+            return jsonify({'message': 'Chat does not exist'}), 404
+        
+        print('bot_id ===========', chats[bot_id]['bot_id'])
+        
+        return jsonify({'botName': chats[bot_id]['instance_name'], 'botId': chats[bot_id]['bot_id']}), 200
+        
+    except Exception as e:  
+        print("error:", str(e))
+        return jsonify({'message': 'Bad request'}), 404
+
+@app.post('/api/embedChat')
+def embedChat():
+    requestInfo = request.get_json()
+    token = requestInfo['token']
+    query = requestInfo['query']
+    bot_id = requestInfo['bot_id']
+    try:
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
+        email = decoded['email']
+        subscription_id = decoded['subscription_id']
+        customer_id = decoded['customer_id']
+
+        connection = get_connection() 
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+    
+        cursor.execute(
+            'SELECT * FROM subscription WHERE email = %s AND subscription_id = %s AND customer_id = %s', (email, subscription_id, customer_id ))
+        subscription = cursor.fetchone()
+        connection.commit()
+
+        if subscription is None:
+            return jsonify({'message': 'Subscription does not exist'}), 404
+
+        print("email = ", email)
+        print("bot_id = ", bot_id)
+
+        cur = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cur.execute(
+            'SELECT * FROM chats WHERE email = %s AND bot_id = %s', (email, bot_id,))
+        chat = cur.fetchone()
+
+        if chat is None:
+            return jsonify({'message': 'Chat does not exist'}), 404
+        
+        user_email_hash = create_hash(email)
+        print(user_email_hash)
+        data_directory = f"data//{user_email_hash}//{bot_id}"
+        print("query=", query)
+        print("bot_id=", bot_id)
+        print('data_directory = ', data_directory)
+        loader = DirectoryLoader(data_directory, glob="./*.txt", loader_cls=TextLoader)
+        documents = loader.load()
+        print("documents = ", documents)
+
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=30)
+
+        texts = text_splitter.split_documents(documents)
+
+        embeddings = OpenAIEmbeddings()
+        new_client = chromadb.PersistentClient()
+        print("emebdingCount", embeddings)
+        # persistent_client = chromadb.PersistentClient()
+        # persistent_client.create_collection(str(create_hash(email)+str(bot_id)))
+        new_client.create_collection(str(create_hash(email)+str(bot_id)))
+        docsearch = Chroma.from_documents(texts, embeddings, client=new_client, collection_name=(str(create_hash(email)+str(bot_id))))
+        print("embedding = ",embeddings)
+
+        connection = get_connection()
+        cur = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cur.execute(
+            'SELECT * FROM chats WHERE email = %s AND bot_id = %s', (email, bot_id))
+        chat = cur.fetchone()
+        bot_prompt = chat['bot_prompt']
+        
+        template = bot_prompt + """
+        {context}
+
+        {chat_history}
+
+        Human: {human_input}
+        Chatbot: """
+
+        print("template = ", template)
+
+
+        prompt = PromptTemplate(
+            template=template,
+            input_variables=["chat_history", "human_input", "context"]
+            )
+        
+        llm = OpenAI(model_name='gpt-3.5-turbo',
+                temperature=0)
+        memory = ConversationTokenBufferMemory(llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
+        # cursor.execute(
+        #     'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
+        # chain = cursor.fetchone()
+        # print("chain ==", chain)
+        # connection.commit()
+        #test a message and log cost of API call
+
+        # if chain is None:
+        conversation_chain = load_qa_chain(llm=llm, chain_type="stuff", memory=memory, prompt=prompt)
+        # else:
+        #     chain_memory = chain['chain']
+        #     exist_conversation_chain = pickle.loads(bytes(chain_memory))
+        #     conversation_chain = load_qa_chain(llm=llm, chain_type="stuff", memory=exist_conversation_chain.memory, prompt=prompt)
+
+        with get_openai_callback() as cb:
+            print("query ====", query)
+            docs = docsearch.similarity_search(query)
+            conversation_chain({"input_documents": docs, "human_input": query}, return_only_outputs=True)
+            text = conversation_chain.memory.buffer[-1].content
+            print("cb ===== ",cb)
+        memory.load_memory_variables({})
+        new_client.delete_collection(str(create_hash(email)+str(bot_id)))
+        # new_chain = pickle.dumps(conversation_chain)
+        # if chain is None:
+        #     cursor.execute('INSERT INTO botchain(email, botid, chain) VALUES (%s, %s, %s) RETURNING *',
+        #                 (email, bot_id, new_chain))
+        # else:
+        #     cursor.execute('UPDATE botchain SET chain = %s WHERE email = %s AND botid = %s', (new_chain, email, bot_id, ))
+        # connection.commit()
+
+        print("text = ", text),
+
+        # Check if the response contains a link
+        url_pattern = re.compile(r"(?P<url>https?://[^\s]+)")
+
+        # replace URLs with anchor tags in the text
+        response = url_pattern.sub(
+            r"<a href='\g<url>' target='_blank' style='color: #0000FF'>\g<url></a>", text)  
+        return jsonify({'message': response}), 200
+    except Exception as e:  
+        print("error:", str(e))
+        return jsonify({'message': 'Bad request'}), 404
+
+@app.post('/api/get_folder_size')
+def get_size():
+    requestInfo = request.get_json()
+    auth_email = requestInfo['email']
+    headers = request.headers
+    bearer = headers.get('Authorization')
+    try:
+        token = bearer.split()[1]
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
+
+        email = decoded['email']
+
+        if(email != auth_email):
+            return jsonify({'authentication': False}), 404
+        
+        user_email_hash = create_hash(email)
+        print(user_email_hash)
+        data_directory = f"data/{user_email_hash}"
+        total_size = folder_size(data_directory)
+        print("total_size = ", total_size/1024/1024)
+        return jsonify({'size': total_size/1024/1024}), 200
+    except Exception as e:  
+        print("error:", str(e))
+        return jsonify({'message': 'Bad request'}), 404
+
+@app.post('/api/get_pdf_files_name')
+def get_pdf_files_name():
+    requestInfo = request.get_json()
+    auth_email = requestInfo['email']
+    bot_id = requestInfo['bot_id']
+    headers = request.headers
+    bearer = headers.get('Authorization')
+    try:
+        token = bearer.split()[1]
+        decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
+
+        email = decoded['email']
+
+        if(email != auth_email):
+            return jsonify({'authentication': False}), 404
+        user_email_hash = create_hash(email)
+        print(user_email_hash)
+        data_directory = f"data/{user_email_hash}/{bot_id}"
+        pdf_files = []
+
+        files = os.listdir(data_directory)
+
+        # Loop through each file in the directory
+        for file in files:
+            # Check if the file ends with ".pdf" (case-insensitive)
+            if file.lower().endswith(".pdf"):
+                # If it does, add the file name to the pdf_files list
+                pdf_files.append(file)
+
+        return jsonify({'names': pdf_files})
+
+    except Exception as e:  
+        print("error:", str(e))
+        return jsonify({'message': 'Bad request'}), 404
+
+def delete_pdf_files(data_directory, file_name):
+    try:
+        # Create the complete path to the file
+        file_path = os.path.join(data_directory, file_name)
+
+        # Check if the file exists before attempting to delete it
+        if os.path.exists(file_path):
+            # Use the os.remove() function to delete the file
+            os.remove(file_path)
+            print(f"File {file_name} has been deleted from {data_directory}.")
+        else:
+            print(f"File {file_name} does not exist in {data_directory}.")
+    except Exception as e:  
+        print("error:", str(e))
+
+
+def folder_size(directory):
+    def _folder_size(directory):
+        total = 0
+        for entry in os.scandir(directory):
+            if entry.is_dir():
+                _folder_size(entry.path)
+                total += parent_size[entry.path]
+            else:
+                if entry.name.lower().endswith('.pdf'):  # Check if file is a PDF
+                    size = entry.stat().st_size
+                    total += size
+                    file_size[entry.path] = size
+        parent_size[directory] = total
+
+    file_size = {}
+    parent_size = {}
+    _folder_size(directory)
+    return parent_size[directory]
 
 # Serve REACT static files
 @app.route('/', methods=['GET'])

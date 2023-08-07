@@ -128,12 +128,15 @@ def delete_data_collection(email, bot_id):
         cursor.execute("UPDATE chats SET chats = %s WHERE email = %s AND bot_id = %s",
                     (chats_str, email, bot_id))
         connection.commit()
+
+        # cursor.execute('DELETE FROM botchain WHERE email = %s AND botid = %s', (email, bot_id))
+        # connection.commit()
         # collection_name = f"my_collection_{create_hash(email)}_{bot_id}"
         # chroma_client.delete_collection(name=collection_name)
-        return 
+        return True
     except Exception as e:
         print('Error: '+ str(e))
-        return 
+        return False
     
 def delete_collection(user_email, connection, cursor):
     try:

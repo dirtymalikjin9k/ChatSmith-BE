@@ -33,6 +33,7 @@ query = """
         id SERIAL PRIMARY KEY,
         email VARCHAR(150) NOT NULL,
         customer_id VARCHAR(150) NOT NULL,
+        subscription_id VARCHAR(150) NOT NULL,
         start_date VARCHAR(150) NOT NULL,
         end_date VARCHAR(150) NOT NULL,
         created date DEFAULT CURRENT_TIMESTAMP
@@ -46,4 +47,14 @@ query = """
         password VARCHAR(150) NOT NULL,
         created date DEFAULT CURRENT_TIMESTAMP
     )
+"""
+
+query = """
+    CREATE TABLE botchain (
+        id SERIAL PRIMARY KEY,
+        botid INTEGER NOT NULL,
+        email VARCHAR(150) NOT NULL,
+        chain BYTEA,
+        created DATE DEFAULT CURRENT_TIMESTAMP
+    );
 """

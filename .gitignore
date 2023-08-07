@@ -8,6 +8,7 @@
 /.chroma
 /.env
 /__pycache__
+/chroma
 
 # testing
 /coverage
