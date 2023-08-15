@@ -14,3 +14,20 @@ stripe==5.4.0
 Werkzeug==2.3.4
 dotenv
 gunicorn
+urllib
+# google.oauth2
+# requests
+# bs4
+# urllib.parse
+# os
+# time
+# psycopg2
+# hashlib
+# flask
+# flask_cors
+# ask
+# psycopg2
+# json
+# shutil
+# stripe
+# datetime

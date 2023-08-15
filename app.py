@@ -1,7 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-import base64
 import os
 import time
 import psycopg2
@@ -15,17 +14,12 @@ import json
 import shutil
 import stripe
 from datetime import datetime, timedelta
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
-from dateutil.relativedelta import relativedelta
 import jwt
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 import re
-from werkzeug.utils import secure_filename
 import pickle
 from dotenv import load_dotenv
-from werkzeug.datastructures import ImmutableMultiDict
 
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
