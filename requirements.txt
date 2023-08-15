@@ -13,3 +13,4 @@ sendgrid==6.10.0
 stripe==5.4.0
 Werkzeug==2.3.4
 dotenv
+gunicorn
