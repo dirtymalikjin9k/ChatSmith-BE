@@ -1,8 +1,10 @@
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+import base64
 import os
 import time
+import psycopg2
 import hashlib
 from flask import Flask, flash, render_template, request, redirect, url_for, jsonify, send_from_directory
 from flask_cors import CORS
@@ -23,6 +25,7 @@ import re
 from werkzeug.utils import secure_filename
 import pickle
 from dotenv import load_dotenv
+from werkzeug.datastructures import ImmutableMultiDict
 
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
@@ -62,6 +65,7 @@ dbname = environ.get('DB_NAME')
 user = environ.get('DB_USER')
 password = environ.get('DB_PASSWORD')
 
+
 def get_connection():
     conection = connect(host=host,
                         port=port,
@@ -69,6 +73,7 @@ def get_connection():
                         user=user,
                         password=password)
     return conection
+
 
 def scrape_urls(urls, root_url, user_email, bot_id):
     user_email_hash = create_hash(user_email)
@@ -84,7 +89,8 @@ def scrape_urls(urls, root_url, user_email, bot_id):
         for url in urls:
             time.sleep(5)
             print(url)
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
             page = requests.get(url, headers=headers)
             print("page =", page)
             soup = BeautifulSoup(page.content, "html.parser")
@@ -111,10 +117,11 @@ def scrape_urls(urls, root_url, user_email, bot_id):
             urls_on_page = [urljoin(root_url, url) if not url.startswith(
                 "http") else url for url in urls_on_page]
 
-            # Get the path of the URL 
-            print("root = ",root_url)
-            print("url = ",url + '/')
-            path = urljoin(root_url, url + '/').replace(root_url, "").strip("/")
+            # Get the path of the URL
+            print("root = ", root_url)
+            print("url = ", url + '/')
+            path = urljoin(root_url, url +
+                           '/').replace(root_url, "").strip("/")
             print("path = ", path)
             if path == "":
                 path = "index"
@@ -124,7 +131,7 @@ def scrape_urls(urls, root_url, user_email, bot_id):
             # Create the directory if it doesn't exist
             dirs = os.path.dirname(f"{data_directory}/{path}.txt")
             os.makedirs(dirs, exist_ok=True)
-            
+
             # # Write the page content and URLs to a file
             with open(f"{data_directory}/{path}.txt", "w") as f:
                 f.write(f"{title}: {url}\n")
@@ -144,19 +151,22 @@ def scrape_urls(urls, root_url, user_email, bot_id):
                         f.write(f"{url}\n")
                 f.write("\n")
     except Exception as e:
-        print('Error: '+ str(e))
-        return 
+        print('Error: ' + str(e))
+        return
+
 
 def check_for_pdf_files(folder_path):
     if not os.path.exists(folder_path):
         return False
 
-    pdf_files = [file for file in os.listdir(folder_path) if file.lower().endswith('.pdf')]
+    pdf_files = [file for file in os.listdir(
+        folder_path) if file.lower().endswith('.pdf')]
 
     if pdf_files:
         return True
     else:
         return False
+
 
 @app.post('/api/chat')
 def api_ask():
@@ -173,7 +183,7 @@ def api_ask():
 
         email = decoded['email']
 
-        if(email != auth_email):
+        if (email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
 
         user_email_hash = create_hash(email)
@@ -182,18 +192,22 @@ def api_ask():
         print("query=", query)
         print("bot_id=", bot_id)
         print('data_directory = ', data_directory)
-        txt_loader = DirectoryLoader(data_directory, glob="./*.txt", loader_cls=TextLoader)
-        print("check_pdf_files = ",check_for_pdf_files(data_directory))
+        txt_loader = DirectoryLoader(
+            data_directory, glob="./*.txt", loader_cls=TextLoader)
+        print("check_pdf_files = ", check_for_pdf_files(data_directory))
         if check_for_pdf_files(data_directory):
             print("check_for_pdf_files = ", check_for_pdf_files(data_directory))
-            pdf_loader = DirectoryLoader(data_directory, glob="./*.pdf", loader_cls=PyPDFLoader)
+            pdf_loader = DirectoryLoader(
+                data_directory, glob="./*.pdf", loader_cls=PyPDFLoader)
             documents = pdf_loader.load() + txt_loader.load()
-        else: documents = txt_loader.load()
+        else:
+            documents = txt_loader.load()
         # documents = txt_loader.load()
         # print("txt_documents = ", len(txt_loader.load()))
         print("documents = ", len(documents))
 
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=50)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=2000, chunk_overlap=50)
 
         texts = text_splitter.split_documents(documents)
 
@@ -202,10 +216,12 @@ def api_ask():
         print("emebdingCount", embeddings)
         # persistent_client = chromadb.PersistentClient()
         # persistent_client.create_collection(str(create_hash(email)+str(bot_id)))
-        
-        new_client.get_or_create_collection(str(create_hash(email)+str(bot_id)))
 
-        docsearch = Chroma.from_documents(texts, embeddings, client=new_client, collection_name=str(create_hash(email)+str(bot_id)))
+        new_client.get_or_create_collection(
+            str(create_hash(email)+str(bot_id)))
+
+        docsearch = Chroma.from_documents(
+            texts, embeddings, client=new_client, collection_name=str(create_hash(email)+str(bot_id)))
         # print("embedding = ",embeddings)
 
         connection = get_connection()
@@ -214,7 +230,7 @@ def api_ask():
             'SELECT * FROM chats WHERE email = %s AND bot_id = %s', (email, bot_id))
         chat = cursor.fetchone()
         bot_prompt = chat['bot_prompt']
-        
+
         template = bot_prompt + """
         {context}
 
@@ -234,43 +250,47 @@ def api_ask():
         prompt = PromptTemplate(
             input_variables=["chat_history", "human_input", "context"],
             template=template
-            )
-        
-        llm = OpenAI(model_name='gpt-3.5-turbo-16k',
-            temperature=0.0,
-            max_tokens=8000,
-            )
-        
+        )
 
-        memory = ConversationTokenBufferMemory(llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
+        llm = OpenAI(model_name='gpt-3.5-turbo-16k',
+                     temperature=0.0,
+                     max_tokens=8000,
+                     )
+
+        memory = ConversationTokenBufferMemory(
+            llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
         cursor.execute(
             'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
         chain = cursor.fetchone()
         print("chain ==", chain)
         connection.commit()
         if chain is None:
-            conversation_chain = load_qa_chain(llm=llm, chain_type="stuff", memory=memory, prompt=prompt)
+            conversation_chain = load_qa_chain(
+                llm=llm, chain_type="stuff", memory=memory, prompt=prompt)
         else:
             chain_memory = chain['chain']
             exist_conversation_chain = pickle.loads(bytes(chain_memory))
-            conversation_chain = load_qa_chain(llm=llm, chain_type="stuff", memory=exist_conversation_chain.memory, prompt=prompt)
+            conversation_chain = load_qa_chain(
+                llm=llm, chain_type="stuff", memory=exist_conversation_chain.memory, prompt=prompt)
 
         with get_openai_callback() as cb:
             # query = "Do you know about grillgrate?"
             print("query ====", query)
             docs = docsearch.similarity_search(query)
-            conversation_chain({"input_documents": docs, "human_input": query}, return_only_outputs=True)
+            conversation_chain(
+                {"input_documents": docs, "human_input": query}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
-            print("cb ===== ",cb)
+            print("cb ===== ", cb)
         memory.load_memory_variables({})
         new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         print("text = ", text)
         new_chain = pickle.dumps(conversation_chain)
         if chain is None:
             cursor.execute('INSERT INTO botchain(email, botid, chain) VALUES (%s, %s, %s) RETURNING *',
-                        (email, bot_id, new_chain))
+                           (email, bot_id, new_chain))
         else:
-            cursor.execute('UPDATE botchain SET chain = %s WHERE email = %s AND botid = %s', (new_chain, email, bot_id, ))
+            cursor.execute(
+                'UPDATE botchain SET chain = %s WHERE email = %s AND botid = %s', (new_chain, email, bot_id, ))
         connection.commit()
         # Check if the response contains a link
         url_pattern = re.compile(r"(?P<url>https?://[^\s]+)")
@@ -302,12 +322,13 @@ def api_ask():
 
         app.logger.debug(f"Query: {query}")
         app.logger.debug(f"Response: {response}")
-        
+
         print("response:", response)
         return jsonify({'message': response}), 200
     except Exception as e:
-        print('Error: '+ str(e))
+        print('Error: ' + str(e))
         return jsonify({'message': 'Bad Request'}), 404
+
 
 @app.post('/api/chatsDelete')
 def api_chats_delte():
@@ -323,17 +344,18 @@ def api_chats_delte():
 
         email = decoded['email']
 
-        if(email != auth_email):
+        if (email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
         new_client = chromadb.PersistentClient()
-        new_client.get_or_create_collection(str(create_hash(email)+str(bot_id)))
+        new_client.get_or_create_collection(
+            str(create_hash(email)+str(bot_id)))
         new_client.delete_collection(str(create_hash(email)+str(bot_id)))
 
         response = delete_data_collection(auth_email, bot_id)
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute('DELETE FROM botchain WHERE email = %s AND botid = %s',
-                            (email, bot_id))            
+                       (email, bot_id))
         connection.commit()
         cursor.close()
         connection.close()
@@ -344,6 +366,7 @@ def api_chats_delte():
     except Exception as e:
         print('Error: ' + str(e))
         return jsonify({'message': 'bad request'}), 404
+
 
 @app.post('/api/botDelete')
 def api_bot_delete():
@@ -359,20 +382,21 @@ def api_bot_delete():
 
         email = decoded['email']
 
-        if(email != auth_email):
+        if (email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
         new_client = chromadb.PersistentClient()
-        new_client.get_or_create_collection(str(create_hash(email)+str(bot_id)))
+        new_client.get_or_create_collection(
+            str(create_hash(email)+str(bot_id)))
         new_client.delete_collection(str(create_hash(email)+str(bot_id)))
 
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute('DELETE FROM chats WHERE email = %s AND bot_id = %s',
-                            (email, bot_id))            
+                       (email, bot_id))
         connection.commit()
 
         cursor.execute('DELETE FROM botchain WHERE email = %s AND botid = %s',
-                            (email, bot_id)) 
+                       (email, bot_id))
         connection.commit()
 
         cursor.close()
@@ -385,6 +409,7 @@ def api_bot_delete():
     except Exception as e:
         print('Error: ' + str(e))
         return jsonify({'message': 'bad request'}), 404
+
 
 def verify_google_token(token):
     # Specify the client ID of the Google API Console project that the credential is from
@@ -407,12 +432,13 @@ def verify_google_token(token):
             return None
 
         # Assuming you have the access token in a variable called 'access_token'
-        
+
     except Exception as e:
         print("error:", str(e))
         # Handle invalid token error
         return None
-    
+
+
 @app.post('/api/auth/googleLogin')
 def api_auth_googleLogin():
     requestInfo = request.get_json()
@@ -424,9 +450,9 @@ def api_auth_googleLogin():
 
     try:
         responsePayload = verify_google_token(credential)
-        print("responseEmail = ",responsePayload['email'])
+        print("responseEmail = ", responsePayload['email'])
         if responsePayload['email'] != email:
-                return jsonify({'message': 'Bad request'}), 404
+            return jsonify({'message': 'Bad request'}), 404
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
 
@@ -435,13 +461,13 @@ def api_auth_googleLogin():
 
         if user is not None:
             payload = {
-            'email': email
+                'email': email
             }
             token = jwt.encode(payload, 'chatsavvy_secret', algorithm='HS256')
             return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
-    
+
         cursor.execute('INSERT INTO users(email) VALUES (%s) RETURNING *',
-                (email,))
+                       (email,))
         new_created_user = cursor.fetchone()
         print(new_created_user)
 
@@ -453,39 +479,53 @@ def api_auth_googleLogin():
             'email': email
         }
         token = jwt.encode(payload, 'chatsavvy_secret', algorithm='HS256')
-        
+
         return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
 
     except Exception as e:
         print("error:", str(e))
         return jsonify({'message': 'Bad request'}), 404
 
+
 @app.post('/api/newChat')
 def api_newChat():
-    requestInfo = request.get_json()
-    auth_email = requestInfo['email']
-    instance_name = requestInfo['instace_name']
-    bot_id = requestInfo['bot_id']
-    urls_input = requestInfo['urls_input']
-    bot_prompt = requestInfo['bot_prompt']
-    chats = [{
-        "question": "",
-        "answer": ""
-    }]
 
-    print("urls_input = ", urls_input)
-
-    default_bot_prompt = "Your name is Smith and you are a very enthusiastic expert of the following information who loves to help people! You are a live chat agent for this company and people are communicating with you there. Your job is to answer their questions and direct them to the correct page on the website to find the information they're looking for. Answer the human's question using only the information provided and give a link at the end of your response to a page where they can find more information for what they're looking for. Limit your responses to 50 words. Do not answer questions unrelated to the context provided."
-
-    headers = request.headers
-    bearer = headers.get('Authorization')
     try:
+        requestInfo = dict(request.form)
+        print(requestInfo)
+        auth_email = requestInfo.get('email')
+        instance_name = requestInfo.get('instace_name')
+        bot_name = requestInfo.get('bot_name')
+        bot_avatar = request.files.get('bot_avatar')
+        pdf_file = request.files.get('pdf_file')
+        bot_id = requestInfo.get('bot_id')
+        urls_input = requestInfo.get('urls_input')
+        bot_prompt = requestInfo.get('bot_prompt')
+
+        if bot_avatar:
+            bot_avatar = bot_avatar.read()
+
+        if pdf_file:
+            pdf_file = pdf_file.read()
+
+        chats = [{
+            "question": "",
+            "answer": ""
+        }]
+
+        print("urls_input = ", urls_input)
+
+        default_bot_prompt = "Your name is Smith and you are a very enthusiastic expert of the following information who loves to help people! You are a live chat agent for this company and people are communicating with you there. Your job is to answer their questions and direct them to the correct page on the website to find the information they're looking for. Answer the human's question using only the information provided and give a link at the end of your response to a page where they can find more information for what they're looking for. Limit your responses to 50 words. Do not answer questions unrelated to the context provided."
+
+        headers = request.headers
+        bearer = headers.get('Authorization')
+
         token = bearer.split()[1]
         decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
 
         email = decoded['email']
 
-        if(email != auth_email):
+        if (email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
 
         if bot_prompt == "":
@@ -494,32 +534,33 @@ def api_newChat():
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         chats_str = json.dumps(chats)
-        cursor.execute('INSERT INTO chats (email, instance_name, urls, bot_prompt, bot_id, chats, complete) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *',
-                    (email, instance_name, urls_input, bot_prompt, bot_id, chats_str, 'false'))
+        cursor.execute('INSERT INTO chats (email, instance_name, bot_name, bot_avatar, pdf_file, urls, bot_prompt, bot_id, chats, complete) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *',
+                       (email, instance_name, bot_name, psycopg2.Binary(bot_avatar), psycopg2.Binary(pdf_file), urls_input, bot_prompt, bot_id, chats_str, 'false'))
         new_created_chat = cursor.fetchone()
         connection.commit()
         print(new_created_chat)
 
-        cursor.execute('SELECT * FROM subscription where email = %s', (email ,))
+        cursor.execute('SELECT * FROM subscription where email = %s', (email,))
         subscription = cursor.fetchone()
         connection.commit()
 
         urls = [url.strip() for url in urls_input.split(",")]
 
-        if(subscription is None):
+        if (subscription is None):
             urls = urls[:2]
-        else: 
+        else:
             end_time = datetime.fromtimestamp(int(subscription['end_date']))
             current_time = datetime.now()
-            
-            if(current_time > end_time):
+
+            if (current_time > end_time):
                 urls = urls[:2]
 
         print(len(urls))
         root_url = urljoin(urls[0], "/")
         scrape_urls(urls, root_url, email, bot_id)
 
-        cursor.execute('UPDATE chats SET complete = %s WHERE email = %s AND bot_id = %s', ('true', email, bot_id))
+        cursor.execute(
+            'UPDATE chats SET complete = %s WHERE email = %s AND bot_id = %s', ('true', email, bot_id))
         # new_created_chat = cursor.fetchone()
 
         connection.commit()
@@ -528,14 +569,17 @@ def api_newChat():
 
         return jsonify({'message': 'Success Create'}), 200
     except Exception as e:
-        print('Error: '+ str(e))
+        print('Error: ' + str(e))
         return jsonify({'message': 'Bad Request'}), 404
 
+
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
+
 
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 def delete_text_files(directory):
     for filename in os.listdir(directory):
@@ -543,6 +587,7 @@ def delete_text_files(directory):
         if os.path.isfile(filepath) and filename.endswith(".txt"):
             os.remove(filepath)
             print(f"Deleted: {filepath}")
+
 
 @app.post('/api/updateChat')
 def api_updateChat():
@@ -566,8 +611,7 @@ def api_updateChat():
     #     file.save('/data/0ccbde2fa87100168e416c899a4f598e/2', filename
     user_email_hash = create_hash(auth_email)
 
-    print("bot_id ===== " , bot_id)
-    
+    print("bot_id ===== ", bot_id)
 
     try:
         token = bearer.split()[1]
@@ -575,10 +619,11 @@ def api_updateChat():
 
         email = decoded['email']
 
-        if(email != auth_email):
+        if (email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
         new_client = chromadb.PersistentClient()
-        new_client.get_or_create_collection(str(create_hash(email)+str(bot_id)))
+        new_client.get_or_create_collection(
+            str(create_hash(email)+str(bot_id)))
         new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         user_email_hash = create_hash(email)
         print("file length = ", len(files))
@@ -595,28 +640,28 @@ def api_updateChat():
             for file in files:
                 file.save(data_directory + "/" + file.filename)
 
-                upload_files_size += os.path.getsize(f"{data_directory}/{file.filename}")
+                upload_files_size += os.path.getsize(
+                    f"{data_directory}/{file.filename}")
 
-            print("uplad_files_size ============================ ", upload_files_size)
+            print("uplad_files_size ============================ ",
+                  upload_files_size)
             data_path = f"data/{user_email_hash}"
             if upload_files_size + folder_size(data_path) > 10 * 1024 * 1024:
                 for file in files:
                     os.remove(f"{data_directory}/{file.filename}")
-                return jsonify({'message': 'You can upload the files total 10MB'}), 404 
+                return jsonify({'message': 'You can upload the files total 10MB'}), 404
 
-        
         delete_text_files(data_directory)
-        
+
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
-                (instance_name, urls_input, bot_prompt, custom_text, 'false', email, bot_id))
+                       (instance_name, urls_input, bot_prompt, custom_text, 'false', email, bot_id))
         connection.commit()
 
         cursor.execute('DELETE FROM botchain WHERE email = %s AND botid = %s',
-                            (email, bot_id))    
+                       (email, bot_id))
         connection.commit()
-
 
         urls = [url.strip() for url in urls_input.split(",")]
         root_url = urljoin(urls[0], "/")
@@ -627,16 +672,18 @@ def api_updateChat():
                 file.write(custom_text)
         delete_data_collection(email, bot_id)
         cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
-                (instance_name, urls_input, bot_prompt, custom_text, 'true', email, bot_id))
+                       (instance_name, urls_input, bot_prompt, custom_text, 'true', email, bot_id))
         connection.commit()
         cursor.close()
         connection.close()
-        new_client.get_or_create_collection(str(create_hash(email)+str(bot_id)))
+        new_client.get_or_create_collection(
+            str(create_hash(email)+str(bot_id)))
 
         return jsonify({'message': 'Update Success'}), 200
     except Exception as e:
-        print('Error: '+ str(e))
+        print('Error: ' + str(e))
         # return jsonify({'message': 'Bad Request'}), 404
+
 
 @app.post('/api/getChatInfos')
 def api_getChatInfos():
@@ -651,32 +698,34 @@ def api_getChatInfos():
 
         email = decoded['email']
 
-        if(email != auth_email):
+        if (email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
 
         try:
-            cursor.execute('SELECT * FROM chats WHERE email = %s ', (email,))
+            cursor.execute(
+                "SELECT id, email, instance_name, bot_id, chats, complete, created, urls, bot_name, bot_prompt, encode(bot_avatar, 'base64') AS avatar FROM chats WHERE email = %s ", (email,))  # bot_avatar, pdf_file is missing.
             chats = cursor.fetchall()
             print("chats = ", chats)
             connection.commit()
             cursor.close()
             connection.close()
-    
+
             return jsonify({'chats': chats})
         except Exception as e:
-            print('Error: '+ str(e))
+            print('Error: ' + str(e))
             return jsonify({'message': 'chat does not exist'}), 404
     except Exception as e:
-        print('Error: '+ str(e))
+        print('Error: ' + str(e))
         return jsonify({'message': 'bad request'}), 404
+
 
 @app.post('/api/webhook')
 def api_webhook():
     event = None
     payload = request.data
-    print("endpoint_secret = ",endpoint_secret)
+    print("endpoint_secret = ", endpoint_secret)
     if endpoint_secret:
         sig_header = request.headers.get('Stripe-Signature')
         try:
@@ -686,27 +735,27 @@ def api_webhook():
         except stripe.error.SignatureVerificationError as e:
             print('⚠️  Webhook signature verification failed.' + str(e))
             return jsonify(success=False)
-        
+
     # Handle the event
      # Handle the event
     # print("event-----",event)
     charge = session = invoice = customer = None
     if event['type'] == 'checkout.session.completed':
-      session = event['data']['object']
-      print("session = ",session)
+        session = event['data']['object']
+        print("session = ", session)
     elif event['type'] == 'charge.succeeded':
-      charge = event['data']['object']
-      print("charge = ",charge)
+        charge = event['data']['object']
+        print("charge = ", charge)
     elif event['type'] == 'invoice.paid':
-      invoice = event['data']['object']
-      print("invoice = ",invoice)
+        invoice = event['data']['object']
+        print("invoice = ", invoice)
     # ... handle other event types
     else:
-      print('Unhandled event type {}'.format(event['type']))
+        print('Unhandled event type {}'.format(event['type']))
 
     print("Webhook event recognized:", event['type'])
 
-    if invoice : 
+    if invoice:
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
 
@@ -717,9 +766,9 @@ def api_webhook():
         print("customer_id = ", customer_id)
         start_date = invoice['lines']['data'][0]['period']['start']
         end_date = invoice['lines']['data'][0]['period']['end']
-        
+
         cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date) VALUES (%s, %s, %s, %s, %s) RETURNING *',
-                    (email, customer_id, subscription_id, start_date, end_date))
+                       (email, customer_id, subscription_id, start_date, end_date))
         new_created_user = cursor.fetchone()
         print(new_created_user)
 
@@ -728,6 +777,7 @@ def api_webhook():
         connection.close()
 
     return jsonify(success=True)
+
 
 @app.post('/api/getSubscription')
 def api_getSubscription():
@@ -741,36 +791,37 @@ def api_getSubscription():
 
         email = decoded['email']
 
-        if(email != auth_email):
+        if (email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
-        
+
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         # try:
-        cursor.execute('SELECT * FROM subscription WHERE email = %s ', (email,))
+        cursor.execute(
+            'SELECT * FROM subscription WHERE email = %s ', (email,))
 
         selects = cursor.fetchall()
         connection.commit()
 
         print(selects)
-        
-        if(len(selects) == 0) :
-             return jsonify({'customerId': '', 'subscriptionId': '', 'count':'1'})
+
+        if (len(selects) == 0):
+            return jsonify({'customerId': '', 'subscriptionId': '', 'count': '1'})
         else:
             subscription = selects[len(selects)-1]
             print("subscription = ", subscription)
             end_time = datetime.fromtimestamp(int(subscription['end_date']))
             current_time = datetime.now()
-            
+
             if end_time > current_time:
-                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'count':'10'})
+                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'count': '10'})
             else:
                 cursor.execute('DELETE FROM subscription WHERE email = %s ',
-                                (email, ))            
+                               (email, ))
                 connection.commit()
-                
+
                 cursor.execute('DELETE FROM chats WHERE email = %s ',
-                                (email, ))            
+                               (email, ))
                 connection.commit()
 
                 cursor.close()
@@ -778,10 +829,11 @@ def api_getSubscription():
                 user_email_hash = create_hash(email)
                 data_directory = f"data/{user_email_hash}"
                 shutil.rmtree(data_directory)
-                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'count':'1'})
+                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'count': '1'})
     except Exception as e:
-        print('Error: '+ str(e))
+        print('Error: ' + str(e))
         return jsonify({'message': 'bad request'}), 404
+
 
 @app.post('/api/unSubscribe')
 def api_unsubscribe():
@@ -796,19 +848,21 @@ def api_unsubscribe():
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         # try:
         cursor.execute('DELETE FROM subscription WHERE email = %s',
-                                (email,))            
+                       (email,))
         connection.commit()
 
         # cursor.execute('DELETE FROM chats WHERE email = %s',
-        #                         (email,))            
+        #                         (email,))
         # connection.commit()
         response = delete_collection(email, connection, cursor)
         cursor.close()
         connection.close()
         return "ok"
 
+
 def create_hash(text):
     return hashlib.md5(text.encode()).hexdigest()
+
 
 @app.post('/api/sendVerifyEmail')
 def api_sendVerifyEmail():
@@ -819,16 +873,16 @@ def api_sendVerifyEmail():
     expiry_time = datetime.utcnow() + timedelta(hours=1)
 
     payload = {
-            'email': email,
-            'expired_time': expiry_time.isoformat()
-        }
+        'email': email,
+        'expired_time': expiry_time.isoformat()
+    }
     token = jwt.encode(payload, 'chatsavvy_secret', algorithm='HS256')
     print("token = ", token)
     message = Mail(
         from_email='admin@beyondreach.ai',
         to_emails=email,
         subject='Sign in to ChatSmith',
-        html_content = f'<p style="color: #500050;">Hello<br/><br/>We received a request to sign in to ChatSmith using this email address {email}. If you want to sign in to your ChatSmith account, click this link:<br/><br/><a href="https://app.chatsmith.ai/#/verify/{token}">Sign in to ChatSmith</a><br/><br/>If you did not request this link, you can safely ignore this email.<br/><br/>Thanks.<br/><br/>Your ChatSmith team.</p>'
+        html_content=f'<p style="color: #500050;">Hello<br/><br/>We received a request to sign in to ChatSmith using this email address {email}. If you want to sign in to your ChatSmith account, click this link:<br/><br/><a href="https://app.chatsmith.ai/#/verify/{token}">Sign in to ChatSmith</a><br/><br/>If you did not request this link, you can safely ignore this email.<br/><br/>Thanks.<br/><br/>Your ChatSmith team.</p>'
     )
     try:
         sg = SendGridAPIClient(api_key=environ.get('SENDGRID_API_KEY'))
@@ -836,12 +890,13 @@ def api_sendVerifyEmail():
         sg.send(message)
         return jsonify({'status': True}), 200
     except Exception as e:
-        print("Error:",str(e))
-        return jsonify({'status':False}), 404
-    
+        print("Error:", str(e))
+        return jsonify({'status': False}), 404
+
+
 @app.post('/api/verify/<token>')
 def verify_token(token):
-    print("token = ",token)
+    print("token = ", token)
     try:
         decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
 
@@ -851,8 +906,8 @@ def verify_token(token):
         print('expired_time:', expired_time)
         print('utc_time:', datetime.utcnow())
         if expired_time < datetime.utcnow():
-            return  jsonify({'message': 'Expired time out'}), 404
-        
+            return jsonify({'message': 'Expired time out'}), 404
+
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
 
@@ -867,12 +922,11 @@ def verify_token(token):
             return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
 
         cursor.execute('INSERT INTO users(email) VALUES (%s) RETURNING *',
-                    (email))
+                       (email))
         new_created_user = cursor.fetchone()
         print(new_created_user)
 
         connection.commit()
-        
 
         payload = {
             'email': email
@@ -886,6 +940,7 @@ def verify_token(token):
     except:
         return jsonify({'message': 'Email already exist'}), 404
 
+
 @app.post('/api/auth/loginCheck')
 def api_loginCheck():
     requestInfo = request.get_json()
@@ -898,20 +953,22 @@ def api_loginCheck():
 
         email = decoded['email']
 
-        if(email != auth_email):
+        if (email != auth_email):
             return jsonify({'authentication': False}), 404
 
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
-    
+
         cursor.execute('SELECT * FROM users WHERE email = %s', (email, ))
         user = cursor.fetchone()
 
         if user is not None:
             return jsonify({'authentication': True}), 200
-        else: return jsonify({'authentication': False}), 404
-    except: 
+        else:
+            return jsonify({'authentication': False}), 404
+    except:
         return jsonify({'authentication': False}), 404
+
 
 @app.post('/api/cancelSubscription')
 def cancelSubscription():
@@ -927,13 +984,14 @@ def cancelSubscription():
 
         email = decoded['email']
 
-        if(email != auth_email):
+        if (email != auth_email):
             return jsonify({'authentication': False}), 404
-        
+
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
-    
-        cursor.execute('DELETE FROM subscription WHERE email = %s AND customer_id = %s AND subscription_id = %s', (email, customer_id, subscription_id  ))
+
+        cursor.execute('DELETE FROM subscription WHERE email = %s AND customer_id = %s AND subscription_id = %s',
+                       (email, customer_id, subscription_id))
         connection.commit()
 
         cursor.execute('DELETE FROM chats WHERE email = %s', (email, ))
@@ -945,16 +1003,17 @@ def cancelSubscription():
         data_directory = f"data/{user_email_hash}"
         shutil.rmtree(data_directory)
         return jsonify({'message': 'Success deleted'}), 200
-    except Exception as e:  
+    except Exception as e:
         print("error:", str(e))
         return jsonify({'message': 'Bad request'}), 404
+
 
 @app.post('/api/createEmbedScriptToken')
 def makeEmbedScriptToken():
     requestInfo = request.get_json()
     auth_email = requestInfo['email']
     bot_id = requestInfo['bot_id']
-    
+
     headers = request.headers
     bearer = headers.get('Authorization')
     try:
@@ -963,12 +1022,12 @@ def makeEmbedScriptToken():
 
         email = decoded['email']
 
-        if(email != auth_email):
+        if (email != auth_email):
             return jsonify({'authentication': False}), 404
-        
+
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
-    
+
         cursor.execute(
             'SELECT * FROM subscription WHERE email = %s ', (email, ))
         subscription = cursor.fetchone()
@@ -993,10 +1052,11 @@ def makeEmbedScriptToken():
         cursor.close()
         connection.close()
         return jsonify({'message': 'Success created', 'token': token}), 200
-    except Exception as e:  
+    except Exception as e:
         print("error:", str(e))
         return jsonify({'message': 'Bad request'}), 404
-    
+
+
 @app.post('/api/getEmbedChatBotInfo')
 def getEmbedChatBotInfo():
     requestInfo = request.get_json()
@@ -1011,17 +1071,17 @@ def getEmbedChatBotInfo():
 
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
-    
+
         cursor.execute(
-            'SELECT * FROM subscription WHERE email = %s AND subscription_id = %s AND customer_id = %s', (email, subscription_id, customer_id ))
+            'SELECT * FROM subscription WHERE email = %s AND subscription_id = %s AND customer_id = %s', (email, subscription_id, customer_id))
         subscription = cursor.fetchone()
         connection.commit()
 
         if subscription is None:
             return jsonify({'message': 'Subscription does not exist'}), 404
-        
+
         cursor.execute(
-            'SELECT * FROM subscription WHERE email = %s AND subscription_id = %s AND customer_id = %s', (email, subscription_id, customer_id ))
+            'SELECT * FROM subscription WHERE email = %s AND subscription_id = %s AND customer_id = %s', (email, subscription_id, customer_id))
         subscription = cursor.fetchone()
 
         cursor.execute('SELECT * FROM chats WHERE email = %s ', (email,))
@@ -1029,14 +1089,15 @@ def getEmbedChatBotInfo():
 
         if chats is None:
             return jsonify({'message': 'Chat does not exist'}), 404
-        
+
         print('bot_id ===========', chats[bot_id]['bot_id'])
-        
+
         return jsonify({'botName': chats[bot_id]['instance_name'], 'botId': chats[bot_id]['bot_id']}), 200
-        
-    except Exception as e:  
+
+    except Exception as e:
         print("error:", str(e))
         return jsonify({'message': 'Bad request'}), 404
+
 
 @app.post('/api/embedChat')
 def embedChat():
@@ -1050,11 +1111,11 @@ def embedChat():
         subscription_id = decoded['subscription_id']
         customer_id = decoded['customer_id']
 
-        connection = get_connection() 
+        connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
-    
+
         cursor.execute(
-            'SELECT * FROM subscription WHERE email = %s AND subscription_id = %s AND customer_id = %s', (email, subscription_id, customer_id ))
+            'SELECT * FROM subscription WHERE email = %s AND subscription_id = %s AND customer_id = %s', (email, subscription_id, customer_id))
         subscription = cursor.fetchone()
         connection.commit()
 
@@ -1071,18 +1132,20 @@ def embedChat():
 
         if chat is None:
             return jsonify({'message': 'Chat does not exist'}), 404
-        
+
         user_email_hash = create_hash(email)
         print(user_email_hash)
         data_directory = f"data//{user_email_hash}//{bot_id}"
         print("query=", query)
         print("bot_id=", bot_id)
         print('data_directory = ', data_directory)
-        loader = DirectoryLoader(data_directory, glob="./*.txt", loader_cls=TextLoader)
+        loader = DirectoryLoader(
+            data_directory, glob="./*.txt", loader_cls=TextLoader)
         documents = loader.load()
         print("documents = ", documents)
 
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=30)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=200, chunk_overlap=30)
 
         texts = text_splitter.split_documents(documents)
 
@@ -1092,8 +1155,9 @@ def embedChat():
         # persistent_client = chromadb.PersistentClient()
         # persistent_client.create_collection(str(create_hash(email)+str(bot_id)))
         new_client.create_collection(str(create_hash(email)+str(bot_id)))
-        docsearch = Chroma.from_documents(texts, embeddings, client=new_client, collection_name=(str(create_hash(email)+str(bot_id))))
-        print("embedding = ",embeddings)
+        docsearch = Chroma.from_documents(texts, embeddings, client=new_client, collection_name=(
+            str(create_hash(email)+str(bot_id))))
+        print("embedding = ", embeddings)
 
         connection = get_connection()
         cur = connection.cursor(cursor_factory=extras.RealDictCursor)
@@ -1101,7 +1165,7 @@ def embedChat():
             'SELECT * FROM chats WHERE email = %s AND bot_id = %s', (email, bot_id))
         chat = cur.fetchone()
         bot_prompt = chat['bot_prompt']
-        
+
         template = bot_prompt + """
         {context}
 
@@ -1112,24 +1176,25 @@ def embedChat():
 
         print("template = ", template)
 
-
         prompt = PromptTemplate(
             template=template,
             input_variables=["chat_history", "human_input", "context"]
-            )
-        
+        )
+
         llm = OpenAI(model_name='gpt-3.5-turbo',
-                temperature=0)
-        memory = ConversationTokenBufferMemory(llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
+                     temperature=0)
+        memory = ConversationTokenBufferMemory(
+            llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
         # cursor.execute(
         #     'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
         # chain = cursor.fetchone()
         # print("chain ==", chain)
         # connection.commit()
-        #test a message and log cost of API call
+        # test a message and log cost of API call
 
         # if chain is None:
-        conversation_chain = load_qa_chain(llm=llm, chain_type="stuff", memory=memory, prompt=prompt)
+        conversation_chain = load_qa_chain(
+            llm=llm, chain_type="stuff", memory=memory, prompt=prompt)
         # else:
         #     chain_memory = chain['chain']
         #     exist_conversation_chain = pickle.loads(bytes(chain_memory))
@@ -1138,9 +1203,10 @@ def embedChat():
         with get_openai_callback() as cb:
             print("query ====", query)
             docs = docsearch.similarity_search(query)
-            conversation_chain({"input_documents": docs, "human_input": query}, return_only_outputs=True)
+            conversation_chain(
+                {"input_documents": docs, "human_input": query}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
-            print("cb ===== ",cb)
+            print("cb ===== ", cb)
         memory.load_memory_variables({})
         new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         # new_chain = pickle.dumps(conversation_chain)
@@ -1158,11 +1224,12 @@ def embedChat():
 
         # replace URLs with anchor tags in the text
         response = url_pattern.sub(
-            r"<a href='\g<url>' target='_blank' style='color: #0000FF'>\g<url></a>", text)  
+            r"<a href='\g<url>' target='_blank' style='color: #0000FF'>\g<url></a>", text)
         return jsonify({'message': response}), 200
-    except Exception as e:  
+    except Exception as e:
         print("error:", str(e))
         return jsonify({'message': 'Bad request'}), 404
+
 
 @app.post('/api/get_folder_size')
 def get_size():
@@ -1176,18 +1243,19 @@ def get_size():
 
         email = decoded['email']
 
-        if(email != auth_email):
+        if (email != auth_email):
             return jsonify({'authentication': False}), 404
-        
+
         user_email_hash = create_hash(email)
         print(user_email_hash)
         data_directory = f"data/{user_email_hash}"
         total_size = folder_size(data_directory)
         print("total_size = ", total_size/1024/1024)
         return jsonify({'size': total_size/1024/1024}), 200
-    except Exception as e:  
+    except Exception as e:
         print("error:", str(e))
         return jsonify({'message': 'Bad request'}), 404
+
 
 @app.post('/api/get_pdf_files_name')
 def get_pdf_files_name():
@@ -1202,7 +1270,7 @@ def get_pdf_files_name():
 
         email = decoded['email']
 
-        if(email != auth_email):
+        if (email != auth_email):
             return jsonify({'authentication': False}), 404
         user_email_hash = create_hash(email)
         print(user_email_hash)
@@ -1220,9 +1288,10 @@ def get_pdf_files_name():
 
         return jsonify({'names': pdf_files})
 
-    except Exception as e:  
+    except Exception as e:
         print("error:", str(e))
         return jsonify({'message': 'Bad request'}), 404
+
 
 def delete_pdf_files(data_directory, file_name):
     try:
@@ -1236,7 +1305,7 @@ def delete_pdf_files(data_directory, file_name):
             print(f"File {file_name} has been deleted from {data_directory}.")
         else:
             print(f"File {file_name} does not exist in {data_directory}.")
-    except Exception as e:  
+    except Exception as e:
         print("error:", str(e))
 
 
@@ -1260,9 +1329,12 @@ def folder_size(directory):
     return parent_size[directory]
 
 # Serve REACT static files
+
+
 @app.route('/', methods=['GET'])
 def run():
     return 'server is running'
 
+
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000,debug=True, threaded=True)
+    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
