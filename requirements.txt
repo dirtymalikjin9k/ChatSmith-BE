@@ -14,7 +14,6 @@ stripe==5.4.0
 Werkzeug==2.3.4
 dotenv
 gunicorn
-urllib
 # google.oauth2
 # requests
 # bs4
