@@ -14,6 +14,7 @@ stripe==5.4.0
 Werkzeug==2.3.4
 dotenv
 gunicorn
+PyPDF2
 # google.oauth2
 # requests
 # bs4

@@ -1,7 +1,10 @@
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+from werkzeug.utils import secure_filename
 import os
+import uuid
+import io
 import time
 import psycopg2
 import hashlib
@@ -19,6 +22,7 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 import re
 import pickle
+import PyPDF2
 from dotenv import load_dotenv
 
 from langchain.embeddings import OpenAIEmbeddings
@@ -71,25 +75,19 @@ def get_connection():
 
 def scrape_urls(urls, root_url, user_email, bot_id):
     user_email_hash = create_hash(user_email)
-    print(user_email_hash)
     data_directory = f"data/{user_email_hash}/{bot_id}"
     os.makedirs(data_directory, exist_ok=True)
     unique_content = set()
     unique_urls = set()
 
-    print(urls)
-
     try:
         for url in urls:
             time.sleep(5)
-            print(url)
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
             page = requests.get(url, headers=headers)
-            print("page =", page)
             soup = BeautifulSoup(page.content, "html.parser")
             title = soup.title.string
-            print("title = ", title)
             # # Remove script and style tags
             for script in soup(["script", "style"]):
                 script.extract()
@@ -112,11 +110,8 @@ def scrape_urls(urls, root_url, user_email, bot_id):
                 "http") else url for url in urls_on_page]
 
             # Get the path of the URL
-            print("root = ", root_url)
-            print("url = ", url + '/')
             path = urljoin(root_url, url +
                            '/').replace(root_url, "").strip("/")
-            print("path = ", path)
             if path == "":
                 path = "index"
             else:
@@ -129,7 +124,6 @@ def scrape_urls(urls, root_url, user_email, bot_id):
             # # Write the page content and URLs to a file
             with open(f"{data_directory}/{path}.txt", "w") as f:
                 f.write(f"{title}: {url}\n")
-                print("content:", content)
                 # time.sleep(5)
                 for line in content:
                     try:
@@ -181,16 +175,11 @@ def api_ask():
             return jsonify({'message': 'Authrization is faild'}), 404
 
         user_email_hash = create_hash(email)
-        print(user_email_hash)
         data_directory = f"data//{user_email_hash}//{bot_id}"
-        print("query=", query)
-        print("bot_id=", bot_id)
-        print('data_directory = ', data_directory)
         txt_loader = DirectoryLoader(
             data_directory, glob="./*.txt", loader_cls=TextLoader)
-        print("check_pdf_files = ", check_for_pdf_files(data_directory))
+
         if check_for_pdf_files(data_directory):
-            print("check_for_pdf_files = ", check_for_pdf_files(data_directory))
             pdf_loader = DirectoryLoader(
                 data_directory, glob="./*.pdf", loader_cls=PyPDFLoader)
             documents = pdf_loader.load() + txt_loader.load()
@@ -198,7 +187,6 @@ def api_ask():
             documents = txt_loader.load()
         # documents = txt_loader.load()
         # print("txt_documents = ", len(txt_loader.load()))
-        print("documents = ", len(documents))
 
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=2000, chunk_overlap=50)
@@ -207,7 +195,6 @@ def api_ask():
 
         embeddings = OpenAIEmbeddings()
         new_client = chromadb.PersistentClient()
-        print("emebdingCount", embeddings)
         # persistent_client = chromadb.PersistentClient()
         # persistent_client.create_collection(str(create_hash(email)+str(bot_id)))
 
@@ -233,14 +220,6 @@ def api_ask():
         Human: {human_input}
         Chatbot: """
 
-        # template = """ Your name is Smith and you are a very enthusiastic expert of the following information who loves to help people! You are a live chat agent for this company and people are communicating with you there. Your job is to answer their questions and direct them to the correct page on the website to find the information they're looking for. Answer the human's question using only the information provided and give a link at the end of your response to a page where they can find more information for what they're looking for. Only give links to pages you find in the context. do not use [] to describe the link. Limit your responses to 50 words. Do not answer questions unrelated to the context provided.
-
-        # {context}
-
-        # {chat_history}
-        # Human: {human_input}
-        # Chatbot:"""
-
         prompt = PromptTemplate(
             input_variables=["chat_history", "human_input", "context"],
             template=template
@@ -256,7 +235,6 @@ def api_ask():
         cursor.execute(
             'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
         chain = cursor.fetchone()
-        print("chain ==", chain)
         connection.commit()
         if chain is None:
             conversation_chain = load_qa_chain(
@@ -269,15 +247,12 @@ def api_ask():
 
         with get_openai_callback() as cb:
             # query = "Do you know about grillgrate?"
-            print("query ====", query)
             docs = docsearch.similarity_search(query)
             conversation_chain(
                 {"input_documents": docs, "human_input": query}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
-            print("cb ===== ", cb)
         memory.load_memory_variables({})
         new_client.delete_collection(str(create_hash(email)+str(bot_id)))
-        print("text = ", text)
         new_chain = pickle.dumps(conversation_chain)
         if chain is None:
             cursor.execute('INSERT INTO botchain(email, botid, chain) VALUES (%s, %s, %s) RETURNING *',
@@ -317,7 +292,6 @@ def api_ask():
         app.logger.debug(f"Query: {query}")
         app.logger.debug(f"Response: {response}")
 
-        print("response:", response)
         return jsonify({'message': response}), 200
     except Exception as e:
         print('Error: ' + str(e))
@@ -327,7 +301,6 @@ def api_ask():
 @app.post('/api/chatsDelete')
 def api_chats_delte():
     requestInfo = request.get_json()
-    print(requestInfo)
     auth_email = requestInfo['email']
     bot_id = requestInfo['bot_id']
     headers = request.headers
@@ -358,14 +331,12 @@ def api_chats_delte():
         else:
             return jsonify({'message': 'bad request'}), 404
     except Exception as e:
-        print('Error: ' + str(e))
         return jsonify({'message': 'bad request'}), 404
 
 
 @app.post('/api/botDelete')
 def api_bot_delete():
     requestInfo = request.get_json()
-    print(requestInfo)
     auth_email = requestInfo['email']
     bot_id = requestInfo['bot_id']
     headers = request.headers
@@ -419,7 +390,6 @@ def verify_google_token(token):
 
         if response.status_code == 200:
             user_info = response.json()
-            print("user_info = ", user_info)
             return user_info
         else:
             print(f"Error: {response.status_code}")
@@ -439,12 +409,8 @@ def api_auth_googleLogin():
     email = requestInfo['email']
     credential = requestInfo['credential']
 
-    print("email = ", email)
-    print("credential = ", credential)
-
     try:
         responsePayload = verify_google_token(credential)
-        print("responseEmail = ", responsePayload['email'])
         if responsePayload['email'] != email:
             return jsonify({'message': 'Bad request'}), 404
         connection = get_connection()
@@ -463,7 +429,6 @@ def api_auth_googleLogin():
         cursor.execute('INSERT INTO users(email) VALUES (%s) RETURNING *',
                        (email,))
         new_created_user = cursor.fetchone()
-        print(new_created_user)
 
         connection.commit()
         cursor.close()
@@ -477,7 +442,6 @@ def api_auth_googleLogin():
         return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
 
     except Exception as e:
-        print("error:", str(e))
         return jsonify({'message': 'Bad request'}), 404
 
 
@@ -496,11 +460,17 @@ def api_newChat():
         urls_input = requestInfo.get('urls_input')
         bot_prompt = requestInfo.get('bot_prompt')
 
+        filename = ''
         if bot_avatar:
             bot_avatar = bot_avatar.read()
 
+        print('pdf_ifle', pdf_file)
         if pdf_file:
-            pdf_file = pdf_file.read()
+            user_email_hash = create_hash(auth_email)
+            dir = f"data/{user_email_hash}/{bot_id}"
+            os.makedirs(dir, exist_ok=True)
+            filename = f"{dir}/{pdf_file.filename}"
+            pdf_file.save(filename)
 
         chats = [{
             "question": "",
@@ -529,7 +499,7 @@ def api_newChat():
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         chats_str = json.dumps(chats)
         cursor.execute('INSERT INTO chats (email, instance_name, bot_name, bot_avatar, pdf_file, urls, bot_prompt, bot_id, chats, complete) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *',
-                       (email, instance_name, bot_name, psycopg2.Binary(bot_avatar), psycopg2.Binary(pdf_file), urls_input, bot_prompt, bot_id, chats_str, 'false'))
+                       (email, instance_name, bot_name, psycopg2.Binary(bot_avatar), filename, urls_input, bot_prompt, bot_id, chats_str, 'false'))
         new_created_chat = cursor.fetchone()
         connection.commit()
         print(new_created_chat)
@@ -596,7 +566,11 @@ def api_updateChat():
     bearer = headers.get('Authorization')
     print("request_data = ", auth_email)
     files = request.files.getlist('files')
-    print("bearer = ", bearer)
+    bot_avatar = request.files.get('bot_avatar')
+    print("bot_avatar = ", bot_avatar)
+
+    if bot_avatar:
+        bot_avatar = bot_avatar.read()
     # if file.filename == '':
     #     flash('No selected file')
     #     return redirect(request.url)
@@ -653,6 +627,11 @@ def api_updateChat():
                        (instance_name, urls_input, bot_prompt, custom_text, 'false', email, bot_id))
         connection.commit()
 
+        if bot_avatar:
+            cursor.execute("UPDATE chats SET bot_avatar = %s WHERE email = %s AND bot_id = %s",
+                           (psycopg2.Binary(bot_avatar), email, bot_id))
+            connection.commit()
+
         cursor.execute('DELETE FROM botchain WHERE email = %s AND botid = %s',
                        (email, bot_id))
         connection.commit()
@@ -699,9 +678,8 @@ def api_getChatInfos():
 
         try:
             cursor.execute(
-                "SELECT id, email, instance_name, bot_id, chats, complete, created, urls, bot_name, bot_prompt, encode(bot_avatar, 'base64') AS avatar FROM chats WHERE email = %s ", (email,))  # bot_avatar, pdf_file is missing.
+                "SELECT id, email, instance_name, custom_text, bot_id, chats, complete, created, urls, bot_name, bot_prompt, encode(bot_avatar, 'base64') AS avatar FROM chats WHERE email = %s ", (email,))  # bot_avatar, pdf_file is missing.
             chats = cursor.fetchall()
-            print("chats = ", chats)
             connection.commit()
             cursor.close()
             connection.close()
