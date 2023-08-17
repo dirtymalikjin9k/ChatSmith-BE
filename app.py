@@ -452,7 +452,6 @@ def api_newChat():
         instance_name = requestInfo.get('instace_name')
         bot_name = requestInfo.get('bot_name')
         bot_avatar = request.files.get('bot_avatar')
-        pdf_file = request.files.get('pdf_file')
         bot_id = requestInfo.get('bot_id')
         urls_input = requestInfo.get('urls_input')
         bot_prompt = requestInfo.get('bot_prompt')
@@ -461,13 +460,26 @@ def api_newChat():
         if bot_avatar:
             bot_avatar = bot_avatar.read()
 
-        print('pdf_ifle', pdf_file)
-        if pdf_file:
-            user_email_hash = create_hash(auth_email)
-            dir = f"data/{user_email_hash}/{bot_id}"
-            os.makedirs(dir, exist_ok=True)
-            filename = f"{dir}/{pdf_file.filename}"
-            pdf_file.save(filename)
+        files = request.files.getlist('files')
+        user_email_hash = create_hash(auth_email)
+        data_directory = f"data/{user_email_hash}/{bot_id}"
+        os.makedirs(data_directory, exist_ok=True)
+        if len(files) > 0:
+            upload_files_size = 0
+
+            for file in files:
+                file.save(data_directory + "/" + file.filename)
+
+                upload_files_size += os.path.getsize(
+                    f"{data_directory}/{file.filename}")
+
+            print("uplad_files_size ============================ ",
+                  upload_files_size)
+            data_path = f"data/{user_email_hash}"
+            if upload_files_size + folder_size(data_path) > 10 * 1024 * 1024:
+                for file in files:
+                    os.remove(f"{data_directory}/{file.filename}")
+                return jsonify({'message': 'You can upload the files total 10MB'}), 404
 
         chats = [{
             "question": "",
