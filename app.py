@@ -3,7 +3,6 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from werkzeug.utils import secure_filename
 import os
-import uuid
 import io
 import time
 import psycopg2
@@ -36,7 +35,6 @@ from langchain.memory import ConversationTokenBufferMemory
 from langchain.llms import OpenAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
-import chromadb
 
 app = Flask(__name__, static_folder='build')
 
