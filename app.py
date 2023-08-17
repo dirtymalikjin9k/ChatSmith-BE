@@ -193,15 +193,15 @@ def api_ask():
         texts = text_splitter.split_documents(documents)
 
         embeddings = OpenAIEmbeddings()
-        new_client = chromadb.PersistentClient()
+        # new_client = chromadb.PersistentClient()
         # persistent_client = chromadb.PersistentClient()
         # persistent_client.create_collection(str(create_hash(email)+str(bot_id)))
 
-        new_client.get_or_create_collection(
-            str(create_hash(email)+str(bot_id)))
+        # new_client.get_or_create_collection(
+        #     str(create_hash(email)+str(bot_id)))
 
         docsearch = Chroma.from_documents(
-            texts, embeddings, client=new_client, collection_name=str(create_hash(email)+str(bot_id)))
+            texts, embeddings, metadatas=[{"source": i} for i in range(len(texts))])
         # print("embedding = ",embeddings)
 
         connection = get_connection()
@@ -251,7 +251,7 @@ def api_ask():
                 {"input_documents": docs, "human_input": query}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
         memory.load_memory_variables({})
-        new_client.delete_collection(str(create_hash(email)+str(bot_id)))
+        # new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         new_chain = pickle.dumps(conversation_chain)
         if chain is None:
             cursor.execute('INSERT INTO botchain(email, botid, chain) VALUES (%s, %s, %s) RETURNING *',
@@ -312,10 +312,10 @@ def api_chats_delte():
 
         if (email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
-        new_client = chromadb.PersistentClient()
-        new_client.get_or_create_collection(
-            str(create_hash(email)+str(bot_id)))
-        new_client.delete_collection(str(create_hash(email)+str(bot_id)))
+        # new_client = chromadb.PersistentClient()
+        # new_client.get_or_create_collection(
+        #     str(create_hash(email)+str(bot_id)))
+        # new_client.delete_collection(str(create_hash(email)+str(bot_id)))
 
         response = delete_data_collection(auth_email, bot_id)
         connection = get_connection()
@@ -348,10 +348,10 @@ def api_bot_delete():
 
         if (email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
-        new_client = chromadb.PersistentClient()
-        new_client.get_or_create_collection(
-            str(create_hash(email)+str(bot_id)))
-        new_client.delete_collection(str(create_hash(email)+str(bot_id)))
+        # new_client = chromadb.PersistentClient()
+        # new_client.get_or_create_collection(
+        #     str(create_hash(email)+str(bot_id)))
+        # new_client.delete_collection(str(create_hash(email)+str(bot_id)))
 
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
@@ -588,10 +588,10 @@ def api_updateChat():
 
         if (email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
-        new_client = chromadb.PersistentClient()
-        new_client.get_or_create_collection(
-            str(create_hash(email)+str(bot_id)))
-        new_client.delete_collection(str(create_hash(email)+str(bot_id)))
+        # new_client = chromadb.PersistentClient()
+        # new_client.get_or_create_collection(
+        #     str(create_hash(email)+str(bot_id)))
+        # new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         user_email_hash = create_hash(email)
         print("file length = ", len(files))
         data_directory = f"data/{user_email_hash}/{bot_id}"
@@ -648,8 +648,8 @@ def api_updateChat():
         connection.commit()
         cursor.close()
         connection.close()
-        new_client.get_or_create_collection(
-            str(create_hash(email)+str(bot_id)))
+        # new_client.get_or_create_collection(
+        #     str(create_hash(email)+str(bot_id)))
 
         return jsonify({'message': 'Update Success'}), 200
     except Exception as e:
@@ -1121,13 +1121,13 @@ def embedChat():
         texts = text_splitter.split_documents(documents)
 
         embeddings = OpenAIEmbeddings()
-        new_client = chromadb.PersistentClient()
+        # new_client = chromadb.PersistentClient()
         print("emebdingCount", embeddings)
         # persistent_client = chromadb.PersistentClient()
         # persistent_client.create_collection(str(create_hash(email)+str(bot_id)))
-        new_client.create_collection(str(create_hash(email)+str(bot_id)))
-        docsearch = Chroma.from_documents(texts, embeddings, client=new_client, collection_name=(
-            str(create_hash(email)+str(bot_id))))
+        # new_client.create_collection(str(create_hash(email)+str(bot_id)))
+        docsearch = Chroma.from_documents(texts, embeddings, metadatas=[
+                                          {"source": i} for i in range(len(texts))])
         print("embedding = ", embeddings)
 
         connection = get_connection()
@@ -1179,7 +1179,7 @@ def embedChat():
             text = conversation_chain.memory.buffer[-1].content
             print("cb ===== ", cb)
         memory.load_memory_variables({})
-        new_client.delete_collection(str(create_hash(email)+str(bot_id)))
+        # new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         # new_chain = pickle.dumps(conversation_chain)
         # if chain is None:
         #     cursor.execute('INSERT INTO botchain(email, botid, chain) VALUES (%s, %s, %s) RETURNING *',
