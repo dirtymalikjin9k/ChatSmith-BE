@@ -22,7 +22,6 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 import re
 import pickle
-import PyPDF2
 from dotenv import load_dotenv
 
 from langchain.embeddings import OpenAIEmbeddings

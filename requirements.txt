@@ -2,19 +2,19 @@ beautifulsoup4==4.12.2
 chromadb==0.3.29
 Flask==2.3.2
 Flask_Cors==3.0.10
-langchain==0.0.264
-protobuf==4.24.0
+langchain==0.0.180
+protobuf==3.9.0
 psycopg2==2.9.6
-PyJWT==2.8.0
+PyJWT==2.7.0
 python-dotenv==1.0.0
 python_dateutil==2.8.2
 Requests==2.31.0
 sendgrid==6.10.0
+openai==0.27.7
 stripe==5.4.0
 Werkzeug==2.3.4
 dotenv
-gunicorn
-PyPDF2
+gunicorn==19.7.1
 # google.oauth2
 # requests
 # bs4
