@@ -721,6 +721,11 @@ def api_updateChat():
             filename = f"{data_directory}/custom_text.txt"
             with open(filename, "w") as file:
                 file.write(custom_text)
+
+        s3.delete_object(Bucket=environ.get(
+            'S3_BUCKET'), Key=f"{data_directory}/custom_text.txt")
+        s3.upload_file(f"{data_directory}/custom_text.txt",
+                       environ.get('S3_BUCKET'), f"{data_directory}/custom_text.txt")
         delete_data_collection(email, bot_id)
         cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
                        (instance_name, urls_input, bot_prompt, custom_text, 'true', email, bot_id))
