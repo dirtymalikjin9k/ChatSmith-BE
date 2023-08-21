@@ -21,6 +21,8 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 import re
 import pickle
+import boto3
+import botocore
 from dotenv import load_dotenv
 
 from langchain.embeddings import OpenAIEmbeddings
@@ -29,6 +31,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import PyPDFLoader, TextLoader
 from langchain.chains import ConversationalRetrievalChain
 from langchain.document_loaders import DirectoryLoader
+from langchain.document_loaders import S3DirectoryLoader
 from langchain.chat_models import ChatOpenAI
 from langchain.callbacks import get_openai_callback
 from langchain.memory import ConversationTokenBufferMemory
@@ -37,6 +40,9 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 
 app = Flask(__name__, static_folder='build')
+
+s3 = boto3.client("s3", aws_access_key_id=environ.get(
+    'S3_KEY'), aws_secret_access_key=environ.get('S3_SECRET'))
 
 load_dotenv()
 
@@ -73,7 +79,7 @@ def get_connection():
 def scrape_urls(urls, root_url, user_email, bot_id):
     user_email_hash = create_hash(user_email)
     data_directory = f"data/{user_email_hash}/{bot_id}"
-    os.makedirs(data_directory, exist_ok=True)
+    # os.makedirs(data_directory, exist_ok=True)
     unique_content = set()
     unique_urls = set()
 
@@ -135,6 +141,11 @@ def scrape_urls(urls, root_url, user_email, bot_id):
                         unique_urls.add(url)
                         f.write(f"{url}\n")
                 f.write("\n")
+
+            print('check if this called')
+            s3.upload_file(f"{data_directory}/{path}.txt",
+                           environ.get('S3_BUCKET'), f"{data_directory}/{path}.txt")
+
     except Exception as e:
         print('Error: ' + str(e))
         return
@@ -172,16 +183,43 @@ def api_ask():
             return jsonify({'message': 'Authrization is faild'}), 404
 
         user_email_hash = create_hash(email)
-        data_directory = f"data//{user_email_hash}//{bot_id}"
-        txt_loader = DirectoryLoader(
-            data_directory, glob="./*.txt", loader_cls=TextLoader)
+        data_directory = f"data/{user_email_hash}/{bot_id}"
+        os.makedirs(name=data_directory, exist_ok=True)
 
-        if check_for_pdf_files(data_directory):
-            pdf_loader = DirectoryLoader(
-                data_directory, glob="./*.pdf", loader_cls=PyPDFLoader)
-            documents = pdf_loader.load() + txt_loader.load()
-        else:
-            documents = txt_loader.load()
+        response = s3.list_objects_v2(Bucket=environ.get(
+            'S3_BUCKET'), Prefix=data_directory)
+
+        print('loading s3 files')
+        documents = []
+        for obj in response.get('Contents', []):
+            print('key :', obj)
+            file_key = obj['Key']
+            # file_obj = s3.get_object(Bucket=environ.get(
+            #     'S3_BUCKET'), Key=file_key)
+            # print('key :', file_obj)
+            # file_content = file_obj['Body'].read().decode('utf-8')
+            try:
+                s3.download_file(environ.get('S3_BUCKET'), file_key, file_key)
+
+                if file_key.lower().endswith(".pdf"):
+                    loader = PyPDFLoader(file_key)
+                elif file_key.lower().endswith(".txt"):
+                    loader = TextLoader(file_key)
+                # Use TextLoader to process text content
+                documents += loader.load()
+            except:
+                continue
+
+        print('loading s3 files finished', documents)
+        # txt_loader = DirectoryLoader(
+        #     data_directory, glob="./*.txt", loader_cls=TextLoader)
+
+        # if check_for_pdf_files(data_directory):
+        #     pdf_loader = DirectoryLoader(
+        #         data_directory, glob="./*.pdf", loader_cls=PyPDFLoader)
+        #     documents = pdf_loader.load() + txt_loader.load()
+        # else:
+        #     documents = txt_loader.load()
         # documents = txt_loader.load()
         # print("txt_documents = ", len(txt_loader.load()))
 
@@ -189,6 +227,7 @@ def api_ask():
             chunk_size=2000, chunk_overlap=50)
 
         texts = text_splitter.split_documents(documents)
+        print('text:', texts)
 
         embeddings = OpenAIEmbeddings()
         # new_client = chromadb.PersistentClient()
@@ -202,6 +241,7 @@ def api_ask():
             texts, embeddings, metadatas=[{"source": i} for i in range(len(texts))])
         # print("embedding = ",embeddings)
 
+        print('doc serach:', docsearch)
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute(
@@ -365,7 +405,13 @@ def api_bot_delete():
         connection.close()
         user_email_hash = create_hash(email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
-        shutil.rmtree(data_directory)
+        print('plz check is this called?')
+        objects = s3.list_objects_v2(Bucket=environ.get(
+            'S3_BUCKET'), Prefix=data_directory)
+        for object in objects['Contents']:
+            s3.delete_object(Bucket=environ.get(
+                'S3_BUCKET'), Key=object['Key'])
+        # shutil.rmtree(data_directory)
         # Chroma.delete_collection(user_email_hash+str(bot_id))
         return jsonify({'message': 'Chatbot Deleted'}), 200
     except Exception as e:
@@ -463,22 +509,34 @@ def api_newChat():
         files = request.files.getlist('files')
         user_email_hash = create_hash(auth_email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
-        os.makedirs(data_directory, exist_ok=True)
+        # os.makedirs(data_directory, exist_ok=True)
         if len(files) > 0:
             upload_files_size = 0
 
             for file in files:
-                file.save(data_directory + "/" + file.filename)
-
-                upload_files_size += os.path.getsize(
-                    f"{data_directory}/{file.filename}")
+                # file.save(data_directory + "/" + file.filename)
+                newFile = file
+                # upload_files_size += newFile.seek(0, 2)
+                # print('size:', upload_files_size)
+                s3.upload_fileobj(
+                    file,
+                    environ.get('S3_BUCKET'),
+                    f"{data_directory}/{file.filename}",
+                    ExtraArgs={
+                        "ACL": "public-read",
+                        "ContentType": file.content_type
+                    }
+                )
 
             print("uplad_files_size ============================ ",
                   upload_files_size)
             data_path = f"data/{user_email_hash}"
+            folderSize = folder_size(data_path)
+            print('folder size:', folderSize)
             if upload_files_size + folder_size(data_path) > 10 * 1024 * 1024:
                 for file in files:
-                    os.remove(f"{data_directory}/{file.filename}")
+                    s3.delete_object(Bucket=environ.get('S3_BUCKET'),
+                                     Key=f"{data_directory}/{file.filename}")
                 return jsonify({'message': 'You can upload the files total 10MB'}), 404
 
         chats = [{
@@ -615,7 +673,16 @@ def api_updateChat():
             upload_files_size = 0
 
             for file in files:
-                file.save(data_directory + "/" + file.filename)
+                # file.save(data_directory + "/" + file.filename)
+                s3.upload_fileobj(
+                    file,
+                    environ.get('S3_BUCKET'),
+                    f"{data_directory}/{file.filename}",
+                    ExtraArgs={
+                        "ACL": "public-read",
+                        "ContentType": file.content_type
+                    }
+                )
 
                 upload_files_size += os.path.getsize(
                     f"{data_directory}/{file.filename}")
@@ -1258,14 +1325,15 @@ def get_pdf_files_name():
         data_directory = f"data/{user_email_hash}/{bot_id}"
         pdf_files = []
 
-        files = os.listdir(data_directory)
+        list = s3.list_objects_v2(Bucket=environ.get(
+            'S3_BUCKET'), Prefix=data_directory)
 
-        # Loop through each file in the directory
-        for file in files:
+        for file in list.get('Contents', []):
+
             # Check if the file ends with ".pdf" (case-insensitive)
-            if file.lower().endswith(".pdf"):
+            if file['Key'].lower().endswith(".pdf"):
                 # If it does, add the file name to the pdf_files list
-                pdf_files.append(file)
+                pdf_files.append(file['Key'].split('/')[-1])
 
         return jsonify({'names': pdf_files})
 
@@ -1277,15 +1345,9 @@ def get_pdf_files_name():
 def delete_pdf_files(data_directory, file_name):
     try:
         # Create the complete path to the file
-        file_path = os.path.join(data_directory, file_name)
-
         # Check if the file exists before attempting to delete it
-        if os.path.exists(file_path):
-            # Use the os.remove() function to delete the file
-            os.remove(file_path)
-            print(f"File {file_name} has been deleted from {data_directory}.")
-        else:
-            print(f"File {file_name} does not exist in {data_directory}.")
+        s3.delete_object(Bucket=environ.get('S3_BUCKET'),
+                         Key=f"{data_directory}/{file_name}")
     except Exception as e:
         print("error:", str(e))
 
@@ -1293,20 +1355,24 @@ def delete_pdf_files(data_directory, file_name):
 def folder_size(directory):
     def _folder_size(directory):
         total = 0
-        for entry in os.scandir(directory):
-            if entry.is_dir():
-                _folder_size(entry.path)
-                total += parent_size[entry.path]
+        list = s3.list_objects_v2(Bucket=environ.get(
+            'S3_BUCKET'), Prefix=directory)
+        for entry in list.get('Contents', []):
+            # for entry in os.scandir(directory):
+            if entry['Key'].lower().endswith("/"):
+                _folder_size(entry['Key'])
+                total += parent_size[entry['Key']]
             else:
-                if entry.name.lower().endswith('.pdf'):  # Check if file is a PDF
-                    size = entry.stat().st_size
+                if entry['Key'].lower().endswith('.pdf'):  # Check if file is a PDF
+                    size = entry['Size']
                     total += size
-                    file_size[entry.path] = size
+                    file_size[entry['Key']] = size
         parent_size[directory] = total
 
     file_size = {}
     parent_size = {}
     _folder_size(directory)
+
     return parent_size[directory]
 
 # Serve REACT static files
