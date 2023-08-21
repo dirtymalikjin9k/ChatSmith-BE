@@ -515,9 +515,11 @@ def api_newChat():
 
             for file in files:
                 # file.save(data_directory + "/" + file.filename)
-                newFile = file
-                # upload_files_size += newFile.seek(0, 2)
-                # print('size:', upload_files_size)
+                file
+                upload_files_size += file.seek(0, 2)
+                print('size:', upload_files_size)
+
+                file.seek(0)
                 s3.upload_fileobj(
                     file,
                     environ.get('S3_BUCKET'),
