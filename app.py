@@ -76,6 +76,37 @@ def get_connection():
     return conection
 
 
+def fetch_sitemap_urls(sitemap_url):
+    try:
+        response = requests.get(sitemap_url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'xml')
+        excluded_extensions = ['.jpg', '.png', '.gif', '.jpeg', '.svg', '.webp',
+                               '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx',
+                               '.mp3', '.mp4', '.avi', '.mov', '.mkv', '.ogg', '.wav']
+        excluded_patterns = ['/s/files/']
+        all_urls = []
+        # If this is a sitemap index
+        sitemap_tags = soup.find_all('sitemap')
+        if sitemap_tags:
+            for sitemap in sitemap_tags:
+                loc = sitemap.find('loc').text
+                # Recursively fetch URLs from each sitemap
+                all_urls.extend(fetch_sitemap_urls(loc))
+        else:
+            # This is a standard sitemap
+            all_urls = [
+                element.text for element in soup.find_all('loc')
+                if not any(element.text.endswith(ext) for ext in excluded_extensions)
+                and not any(pattern in element.text for pattern in excluded_patterns)
+            ]
+        return all_urls
+
+    except requests.RequestException as e:
+        print(f"Error fetching the sitemap: {e}")
+        return []
+
+
 def scrape_urls(urls, root_url, user_email, bot_id):
     user_email_hash = create_hash(user_email)
     data_directory = f"data/{user_email_hash}/{bot_id}"
@@ -143,8 +174,8 @@ def scrape_urls(urls, root_url, user_email, bot_id):
                 f.write("\n")
 
             print('check if this called')
-            s3.upload_file(f"{data_directory}/{path}.txt",
-                           environ.get('S3_BUCKET'), f"{data_directory}/{path}.txt")
+            s3.upload_file(f"{data_directory}/{path}.txt", environ.get('S3_BUCKET'),
+                           f"{data_directory}/{path}.txt", ExtraArgs={'ACL': 'public-read'})
 
     except Exception as e:
         print('Error: ' + str(e))
@@ -488,6 +519,20 @@ def api_auth_googleLogin():
         return jsonify({'message': 'Bad request'}), 404
 
 
+@app.post('/api/fetchPage')
+def api_fetchPage():
+    try:
+        requestInfo = request.get_json()
+        url = requestInfo['url']
+
+        urls = sorted(fetch_sitemap_urls(f"{url}/sitemap.xml"))
+
+        return jsonify({'urls': urls}), 200
+    except Exception as e:
+        print('fetching page error:' + str(e))
+        return jsonify({'message': 'Fetching Error'}), 402
+
+
 @app.post('/api/newChat')
 def api_newChat():
 
@@ -502,6 +547,7 @@ def api_newChat():
         urls_input = requestInfo.get('urls_input')
         bot_prompt = requestInfo.get('bot_prompt')
 
+        print('urls:', urls_input)
         filename = ''
         if bot_avatar:
             bot_avatar = bot_avatar.read()
@@ -725,7 +771,7 @@ def api_updateChat():
         s3.delete_object(Bucket=environ.get(
             'S3_BUCKET'), Key=f"{data_directory}/custom_text.txt")
         s3.upload_file(f"{data_directory}/custom_text.txt",
-                       environ.get('S3_BUCKET'), f"{data_directory}/custom_text.txt")
+                       environ.get('S3_BUCKET'), f"{data_directory}/custom_text.txt", ExtraArgs={'ACL': 'public-read'})
         delete_data_collection(email, bot_id)
         cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
                        (instance_name, urls_input, bot_prompt, custom_text, 'true', email, bot_id))
