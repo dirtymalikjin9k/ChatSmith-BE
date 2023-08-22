@@ -19,7 +19,6 @@ dotenv
 gunicorn==19.7.1
 boto3
 botocore
-lxml
 # google.oauth2
 # requests
 # bs4

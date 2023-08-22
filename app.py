@@ -80,7 +80,7 @@ def fetch_sitemap_urls(sitemap_url):
     try:
         response = requests.get(sitemap_url)
         response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'xml')
+        soup = BeautifulSoup(response.content, 'lxml')
         excluded_extensions = ['.jpg', '.png', '.gif', '.jpeg', '.svg', '.webp',
                                '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx',
                                '.mp3', '.mp4', '.avi', '.mov', '.mkv', '.ogg', '.wav']
