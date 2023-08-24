@@ -117,7 +117,7 @@ def scrape_urls(urls, root_url, user_email, bot_id):
 
     try:
         for url in urls:
-            time.sleep(5)
+            # time.sleep(5)
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
             page = requests.get(url, headers=headers)
@@ -1438,4 +1438,4 @@ def run():
 
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
