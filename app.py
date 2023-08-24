@@ -23,6 +23,7 @@ import re
 import pickle
 import boto3
 import botocore
+import uuid
 from dotenv import load_dotenv
 
 from langchain.embeddings import OpenAIEmbeddings
@@ -541,7 +542,7 @@ def api_newChat():
         print(requestInfo)
         auth_email = requestInfo.get('email')
         instance_name = requestInfo.get('instace_name')
-        bot_name = requestInfo.get('bot_name')
+        bot_name = f"{uuid.uuid1()}"
         bot_avatar = request.files.get('bot_avatar')
         bot_id = requestInfo.get('bot_id')
         urls_input = requestInfo.get('urls_input')
@@ -1113,7 +1114,7 @@ def cancelSubscription():
 def makeEmbedScriptToken():
     requestInfo = request.get_json()
     auth_email = requestInfo['email']
-    bot_id = requestInfo['bot_id']
+    bot_name = requestInfo['bot_name']
 
     headers = request.headers
     bearer = headers.get('Authorization')
@@ -1144,7 +1145,7 @@ def makeEmbedScriptToken():
 
         payload = {
             'email': email,
-            'bot_id': bot_id,
+            'bot_name': bot_name,
             'customer_id': subscription['customer_id'],
             'subscription_id': subscription['subscription_id'],
         }
@@ -1168,7 +1169,7 @@ def getEmbedChatBotInfo():
         email = decoded['email']
         subscription_id = decoded['subscription_id']
         customer_id = decoded['customer_id']
-        bot_id = decoded['bot_id']
+        bot_name = decoded['bot_name']
 
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
@@ -1191,9 +1192,9 @@ def getEmbedChatBotInfo():
         if chats is None:
             return jsonify({'message': 'Chat does not exist'}), 404
 
-        print('bot_id ===========', chats[bot_id]['bot_id'])
+        print('bot_id ===========', chats[bot_name]['bot_id'])
 
-        return jsonify({'botName': chats[bot_id]['instance_name'], 'botId': chats[bot_id]['bot_id']}), 200
+        return jsonify({'botName': chats[bot_name]['instance_name'], 'botId': chats[bot_name]['bot_id']}), 200
 
     except Exception as e:
         print("error:", str(e))

@@ -20,6 +20,7 @@ gunicorn==19.7.1
 boto3
 botocore
 lxml
+uuid
 # google.oauth2
 # requests
 # bs4
