@@ -21,8 +21,6 @@ boto3
 botocore
 lxml
 uuid
-pandas
-pandas.core.arrays.arrow.dtype
 # google.oauth2
 # requests
 # bs4
