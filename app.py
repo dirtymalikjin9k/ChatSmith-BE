@@ -437,7 +437,6 @@ def api_bot_delete():
         connection.close()
         user_email_hash = create_hash(email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
-        print('plz check is this called?')
         objects = s3.list_objects_v2(Bucket=environ.get(
             'S3_BUCKET'), Prefix=data_directory)
         for object in objects['Contents']:
@@ -662,11 +661,15 @@ def allowed_file(filename):
 
 
 def delete_text_files(directory):
-    for filename in os.listdir(directory):
-        filepath = os.path.join(directory, filename)
-        if os.path.isfile(filepath) and filename.endswith(".txt"):
-            os.remove(filepath)
-            print(f"Deleted: {filepath}")
+    objects = s3.list_objects_v2(
+        Bucket=environ.get('S3_BUCKET'), Prefix=directory)
+
+    print('objee:', objects)
+    if hasattr(objects, 'Contents'):
+        for object in objects['Contents']:
+            if object['Key'].lower().endswith(".txt"):
+                s3.delete_object(Bucket=environ.get(
+                    'S3_BUCKET'), Key=object['Key'])
 
 
 @app.post('/api/updateChat')
@@ -718,11 +721,15 @@ def api_updateChat():
             for remove_file in remove_files:
                 delete_pdf_files(data_directory, remove_file)
 
-        if len(files) > 0:
+        # delete all related datas and history.
+        delete_data_collection(email, bot_id)
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+
+        if len(files) > 0:  # pdf update
             upload_files_size = 0
 
             for file in files:
-                # file.save(data_directory + "/" + file.filename)
                 s3.upload_fileobj(
                     file,
                     environ.get('S3_BUCKET'),
@@ -741,48 +748,56 @@ def api_updateChat():
             data_path = f"data/{user_email_hash}"
             if upload_files_size + folder_size(data_path) > 10 * 1024 * 1024:
                 for file in files:
-                    os.remove(f"{data_directory}/{file.filename}")
-                return jsonify({'message': 'You can upload the files total 10MB'}), 404
+                    s3.delete_object(Bucket=environ.get(
+                        'S3_BUCKET'), Key=f"{data_directory}/{file.filename}")
+                return jsonify({'message': 'You can upload the files total 10MB'}), 403
 
-        delete_text_files(data_directory)
+            return jsonify({'message': 'Update Success'}), 200
 
-        connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
-        cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
-                       (instance_name, urls_input, bot_prompt, custom_text, 'false', email, bot_id))
-        connection.commit()
+        elif urls_input is not None:  # url update
+            delete_text_files(data_directory)
+            urls = [url.strip() for url in urls_input.split(",")]
+            root_url = urljoin(urls[0], "/")
+            scrape_urls(urls, root_url, email, bot_id)
 
-        if bot_avatar:
-            cursor.execute("UPDATE chats SET bot_avatar = %s WHERE email = %s AND bot_id = %s",
-                           (psycopg2.Binary(bot_avatar), email, bot_id))
+            cursor.execute(
+                "update chats set urls = %s where email = %s and bot_id = %s", (urls_input, email, bot_id))
+            connection.commit()
+            cursor.close()
+            connection.close()
+            return jsonify({'message': 'Update Success'}), 200
+
+        else:  # normal update
+            if custom_text != "":
+                filename = f"{data_directory}/custom_text.txt"
+                with open(filename, "w") as file:
+                    file.write(custom_text)
+
+            s3.delete_object(Bucket=environ.get(
+                'S3_BUCKET'), Key=f"{data_directory}/custom_text.txt")
+            s3.upload_file(f"{data_directory}/custom_text.txt",
+                           environ.get('S3_BUCKET'), f"{data_directory}/custom_text.txt", ExtraArgs={'ACL': 'public-read'})
+
+            cursor.execute("UPDATE chats SET instance_name = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
+                           (instance_name, bot_prompt, custom_text, 'false', email, bot_id))
             connection.commit()
 
-        cursor.execute('DELETE FROM botchain WHERE email = %s AND botid = %s',
-                       (email, bot_id))
-        connection.commit()
+            if bot_avatar:
+                cursor.execute("UPDATE chats SET bot_avatar = %s WHERE email = %s AND bot_id = %s",
+                               (psycopg2.Binary(bot_avatar), email, bot_id))
+                connection.commit()
 
-        urls = [url.strip() for url in urls_input.split(",")]
-        root_url = urljoin(urls[0], "/")
-        scrape_urls(urls, root_url, email, bot_id)
-        if custom_text != "":
-            filename = f"{data_directory}/custom_text.txt"
-            with open(filename, "w") as file:
-                file.write(custom_text)
+            cursor.execute('DELETE FROM botchain WHERE email = %s AND botid = %s',
+                           (email, bot_id))
+            connection.commit()
 
-        s3.delete_object(Bucket=environ.get(
-            'S3_BUCKET'), Key=f"{data_directory}/custom_text.txt")
-        s3.upload_file(f"{data_directory}/custom_text.txt",
-                       environ.get('S3_BUCKET'), f"{data_directory}/custom_text.txt", ExtraArgs={'ACL': 'public-read'})
-        delete_data_collection(email, bot_id)
-        cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
-                       (instance_name, urls_input, bot_prompt, custom_text, 'true', email, bot_id))
-        connection.commit()
-        cursor.close()
-        connection.close()
-        # new_client.get_or_create_collection(
-        #     str(create_hash(email)+str(bot_id)))
+            cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
+                           (instance_name, urls_input, bot_prompt, custom_text, 'true', email, bot_id))
+            connection.commit()
+            cursor.close()
+            connection.close()
+            return jsonify({'message': 'Update Success'}), 200
 
-        return jsonify({'message': 'Update Success'}), 200
     except Exception as e:
         print('Error: ' + str(e))
         # return jsonify({'message': 'Bad Request'}), 404
