@@ -295,10 +295,14 @@ def api_ask():
             template=template
         )
 
-        llm = OpenAI(model_name='gpt-3.5-turbo-16k',
-                     temperature=0.0,
-                     max_tokens=8000,
-                     )
+        # llm = OpenAI(model_name='gpt-3.5-turbo-16k',
+        #              temperature=0.0,
+        #              max_tokens=8000,
+        #              )
+
+        llm = ChatOpenAI(model="gpt-3.5-turbo-16k",
+                         temperature=0.0,
+                         max_tokens=8000)
 
         memory = ConversationTokenBufferMemory(
             llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
@@ -1299,8 +1303,8 @@ def embedChat():
             input_variables=["chat_history", "human_input", "context"]
         )
 
-        llm = OpenAI(model_name='gpt-3.5-turbo',
-                     temperature=0)
+        llm = ChatOpenAI(model='gpt-3.5-turbo',
+                         temperature=0)
         memory = ConversationTokenBufferMemory(
             llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
         # cursor.execute(
