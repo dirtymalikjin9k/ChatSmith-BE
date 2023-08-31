@@ -559,7 +559,6 @@ def api_newChat():
 
             for file in files:
                 # file.save(data_directory + "/" + file.filename)
-                file
                 upload_files_size += file.seek(0, 2)
                 print('size:', upload_files_size)
 
@@ -677,26 +676,17 @@ def api_updateChat():
     bot_id = request.form.get('bot_id')
     urls_input = request.form.get('urls_input')
     bot_prompt = request.form.get('prompt')
+    bot_color = request.form.get('bot_color')
     custom_text = request.form.get('custom_text')
     remove_files = request.form.getlist('remove_files')
     headers = request.headers
     bearer = headers.get('Authorization')
-    print("request_data = ", auth_email)
     files = request.files.getlist('files')
     bot_avatar = request.files.get('bot_avatar')
-    print("bot_avatar = ", bot_avatar)
 
     if bot_avatar:
         bot_avatar = bot_avatar.read()
-    # if file.filename == '':
-    #     flash('No selected file')
-    #     return redirect(request.url)
-    # if file and allowed_file(file.filename):
-    #     filename = secure_filename(file.filename)
-    #     file.save('/data/0ccbde2fa87100168e416c899a4f598e/2', filename
     user_email_hash = create_hash(auth_email)
-
-    print("bot_id ===== ", bot_id)
 
     try:
         token = bearer.split()[1]
@@ -714,41 +704,41 @@ def api_updateChat():
         print("file length = ", len(files))
         data_directory = f"data/{user_email_hash}/{bot_id}"
 
-        if len(remove_files) > 0:
-            print("removeFiles ========", remove_files)
-            for remove_file in remove_files:
-                delete_pdf_files(data_directory, remove_file)
-
         # delete all related datas and history.
         delete_data_collection(email, bot_id)
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
 
-        if len(files) > 0:  # pdf update
-            upload_files_size = 0
+        if len(files) > 0 or len(remove_files) > 0:  # pdf update
+            if len(remove_files) > 0:
+                print("removeFiles ========", remove_files)
+                for remove_file in remove_files:
+                    delete_pdf_files(data_directory, remove_file)
+            if len(files) > 0:
+                upload_files_size = 0
 
-            for file in files:
-                s3.upload_fileobj(
-                    file,
-                    environ.get('S3_BUCKET'),
-                    f"{data_directory}/{file.filename}",
-                    ExtraArgs={
-                        "ACL": "public-read",
-                        "ContentType": file.content_type
-                    }
-                )
-
-                upload_files_size += os.path.getsize(
-                    f"{data_directory}/{file.filename}")
-
-            print("uplad_files_size ============================ ",
-                  upload_files_size)
-            data_path = f"data/{user_email_hash}"
-            if upload_files_size + folder_size(data_path) > 10 * 1024 * 1024:
                 for file in files:
-                    s3.delete_object(Bucket=environ.get(
-                        'S3_BUCKET'), Key=f"{data_directory}/{file.filename}")
-                return jsonify({'message': 'You can upload the files total 10MB'}), 403
+                    upload_files_size += file.seek(0, 2)
+
+                    file.seek(0)
+                    s3.upload_fileobj(
+                        file,
+                        environ.get('S3_BUCKET'),
+                        f"{data_directory}/{file.filename}",
+                        ExtraArgs={
+                            "ACL": "public-read",
+                            "ContentType": file.content_type
+                        }
+                    )
+
+                print("uplad_files_size ============================ ",
+                      upload_files_size)
+                data_path = f"data/{user_email_hash}"
+                if upload_files_size + folder_size(data_path) > 10 * 1024 * 1024:
+                    for file in files:
+                        s3.delete_object(Bucket=environ.get(
+                            'S3_BUCKET'), Key=f"{data_directory}/{file.filename}")
+                    return jsonify({'message': 'You can upload the files total 10MB'}), 403
 
             return jsonify({'message': 'Update Success'}), 200
 
@@ -766,6 +756,7 @@ def api_updateChat():
             return jsonify({'message': 'Update Success'}), 200
 
         else:  # normal update
+            print('normal update called')
             if custom_text != "":
                 filename = f"{data_directory}/custom_text.txt"
                 with open(filename, "w") as file:
@@ -776,8 +767,8 @@ def api_updateChat():
             s3.upload_file(f"{data_directory}/custom_text.txt",
                            environ.get('S3_BUCKET'), f"{data_directory}/custom_text.txt", ExtraArgs={'ACL': 'public-read'})
 
-            cursor.execute("UPDATE chats SET instance_name = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
-                           (instance_name, bot_prompt, custom_text, 'false', email, bot_id))
+            cursor.execute("UPDATE chats SET instance_name = %s, pdf_file = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
+                           (instance_name, bot_color, bot_prompt, custom_text, 'false', email, bot_id))
             connection.commit()
 
             if bot_avatar:
@@ -789,8 +780,8 @@ def api_updateChat():
                            (email, bot_id))
             connection.commit()
 
-            cursor.execute("UPDATE chats SET instance_name = %s, urls = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
-                           (instance_name, urls_input, bot_prompt, custom_text, 'true', email, bot_id))
+            cursor.execute("UPDATE chats SET instance_name = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
+                           (instance_name, bot_prompt, custom_text, 'true', email, bot_id))
             connection.commit()
             cursor.close()
             connection.close()
@@ -821,7 +812,7 @@ def api_getChatInfos():
 
         try:
             cursor.execute(
-                "SELECT id, email, instance_name, custom_text, bot_id, chats, complete, created, urls, bot_name, bot_prompt, encode(bot_avatar, 'base64') AS avatar FROM chats WHERE email = %s ", (email,))  # bot_avatar, pdf_file is missing.
+                "SELECT id, email, instance_name, custom_text, bot_id, chats, complete, created, urls, bot_name, bot_prompt, pdf_file, encode(bot_avatar, 'base64') AS avatar FROM chats WHERE email = %s ", (email,))  # bot_avatar, pdf_file is missing.
             chats = cursor.fetchall()
             connection.commit()
             cursor.close()
