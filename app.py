@@ -293,12 +293,8 @@ def api_ask():
             input_variables=["chat_history", "human_input", "context"],
             template=template
         )
-        # llm = OpenAI(model_name='gpt-3.5-turbo-16k',
-        #              temperature=0.0,
-        #              max_tokens=8000,
-        #              )
 
-        llm = ChatOpenAI(model="gpt-3.5-turbo-16k",
+        llm = ChatOpenAI(model="gpt-3.5-turbo",
                          temperature=0.0,
                          max_tokens=8000)
 
