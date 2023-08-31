@@ -5,7 +5,6 @@ from werkzeug.utils import secure_filename
 import os
 import io
 import time
-import pandas.core.arrays.arrow.dtype
 import psycopg2
 import hashlib
 from flask import Flask, flash, render_template, request, redirect, url_for, jsonify, send_from_directory
