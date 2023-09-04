@@ -704,15 +704,20 @@ def api_updateChat():
             return jsonify({'message': 'Update Success'}), 200
 
         else:  # normal update
-            if custom_text != "":
-                filename = f"{data_directory}/custom_text.txt"
-                with open(filename, "w") as file:
-                    file.write(custom_text)
+            print('custOM:', custom_text)
+            # if custom_text != "":
+
+            #     # filename = f"{data_directory}/custom_text.txt"
+            #     filename = os.path.join(data_directory, 'custom_text.txt')
+            #     with open(filename, "x") as file:
+            #         file.write(custom_text)
 
             s3.delete_object(Bucket=environ.get(
                 'S3_BUCKET'), Key=f"{data_directory}/custom_text.txt")
-            s3.upload_file(f"{data_directory}/custom_text.txt",
-                           environ.get('S3_BUCKET'), f"{data_directory}/custom_text.txt", ExtraArgs={'ACL': 'public-read'})
+            # s3.upload_file(f"{data_directory}/custom_text.txt",
+            #                environ.get('S3_BUCKET'), f"{data_directory}/custom_text.txt", ExtraArgs={'ACL': 'public-read'})
+            s3.put_object(Body=custom_text, Bucket=environ.get(
+                'S3_BUCKET'), Key=f"{data_directory}/custom_text.txt", ACL='public-read')
 
             cursor.execute("UPDATE chats SET instance_name = %s, pdf_file = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
                            (instance_name, bot_color, bot_prompt, custom_text, 'false', email, bot_id))
