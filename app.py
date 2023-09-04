@@ -704,7 +704,6 @@ def api_updateChat():
             return jsonify({'message': 'Update Success'}), 200
 
         else:  # normal update
-            print('custOM:', custom_text)
             # if custom_text != "":
 
             #     # filename = f"{data_directory}/custom_text.txt"
@@ -1144,7 +1143,7 @@ def embedChat():
     requestInfo = request.get_json()
     token = requestInfo['token']
     query = requestInfo['query']
-    current_url = requestInfo['current_url']
+    uniqueId = requestInfo['unique_id']
     try:
         decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
         email = decoded['email']
@@ -1276,18 +1275,18 @@ def embedChat():
         }
 
         cur.execute('SELECT * FROM embedhistory WHERE email = %s AND name = %s AND url = %s',
-                    (email, bot_name, current_url))
+                    (email, bot_name, uniqueId))
         chat = cur.fetchone()
         if chat is None:  # create new history
             chatStr = json.dumps([newMessage])
             cursor.execute('INSERT INTO embedhistory(email, name, url, chats) VALUES (%s, %s, %s, %s)',
-                           (email, bot_name, current_url, chatStr))
+                           (email, bot_name, uniqueId, chatStr))
         else:
             chat_content = chat['chats']
             chat_content.append(newMessage)
             chatStr = json.dumps(chat_content)
             cursor.execute('UPDATE embedhistory set chats = %s where email = %s and name = %s and url = %s',
-                           (chatStr, email, bot_name, current_url))
+                           (chatStr, email, bot_name, uniqueId))
         connection.commit()
         cur.close()
         cursor.close()
@@ -1301,14 +1300,14 @@ def embedChat():
 
 @app.get('/api/get_embed_chat_history')
 def get_embed_chat_history():
-    email = request.args.get('email')
+    # email = request.args.get('email')
     name = request.args.get('bot_name')
 
     try:
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute(
-            'select * from embedhistory where email = %s and name = %s', (email, name))
+            'select * from embedhistory where name = %s', (name, ))
         chats = cursor.fetchall()
         connection.commit()
         cursor.close()
