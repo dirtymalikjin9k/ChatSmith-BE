@@ -1277,16 +1277,18 @@ def embedChat():
         cur.execute('SELECT * FROM embedhistory WHERE email = %s AND name = %s AND url = %s',
                     (email, bot_name, uniqueId))
         chat = cur.fetchone()
+        now = datetime.now()
+        datestr = f"{now}"
         if chat is None:  # create new history
             chatStr = json.dumps([newMessage])
-            cursor.execute('INSERT INTO embedhistory(email, name, url, chats) VALUES (%s, %s, %s, %s)',
-                           (email, bot_name, uniqueId, chatStr))
+            cursor.execute('INSERT INTO embedhistory(email, name, url, chats, create_time) VALUES (%s, %s, %s, %s, %s)',
+                           (email, bot_name, uniqueId, chatStr, datestr))
         else:
             chat_content = chat['chats']
             chat_content.append(newMessage)
             chatStr = json.dumps(chat_content)
-            cursor.execute('UPDATE embedhistory set chats = %s where email = %s and name = %s and url = %s',
-                           (chatStr, email, bot_name, uniqueId))
+            cursor.execute('UPDATE embedhistory set chats = %s, create_time = %s where name = %s and url = %s',
+                           (chatStr, datestr, bot_name, uniqueId))
         connection.commit()
         cur.close()
         cursor.close()
@@ -1307,7 +1309,7 @@ def get_embed_chat_history():
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute(
-            'select * from embedhistory where name = %s', (name, ))
+            'select * from embedhistory where name = %s order by create_time desc', (name, ))
         chats = cursor.fetchall()
         connection.commit()
         cursor.close()
