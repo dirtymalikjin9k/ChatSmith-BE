@@ -104,7 +104,7 @@ def fetch_sitemap_urls(sitemap_url):
         return all_urls
 
     except requests.RequestException as e:
-        print(f"Error fetching the sitemap: {e}")
+        print(f"fetching Error fetching the sitemap: {e}")
         return []
 
 
@@ -174,12 +174,11 @@ def scrape_urls(urls, root_url, user_email, bot_id):
                         f.write(f"{url}\n")
                 f.write("\n")
 
-            print('check if this called')
             s3.upload_file(f"{data_directory}/{path}.txt", environ.get('S3_BUCKET'),
                            f"{data_directory}/{path}.txt", ExtraArgs={'ACL': 'public-read'})
 
     except Exception as e:
-        print('Error: ' + str(e))
+        print('Error on scraping url: ' + str(e))
         return
 
 
@@ -221,15 +220,9 @@ def api_ask():
         response = s3.list_objects_v2(Bucket=environ.get(
             'S3_BUCKET'), Prefix=data_directory)
 
-        print('loading s3 files')
         documents = []
         for obj in response.get('Contents', []):
-            print('key :', obj)
             file_key = obj['Key']
-            # file_obj = s3.get_object(Bucket=environ.get(
-            #     'S3_BUCKET'), Key=file_key)
-            # print('key :', file_obj)
-            # file_content = file_obj['Body'].read().decode('utf-8')
             try:
                 s3.download_file(environ.get('S3_BUCKET'), file_key, file_key)
 
@@ -242,38 +235,16 @@ def api_ask():
             except:
                 continue
 
-        print('loading s3 files finished', documents)
-        # txt_loader = DirectoryLoader(
-        #     data_directory, glob="./*.txt", loader_cls=TextLoader)
-
-        # if check_for_pdf_files(data_directory):
-        #     pdf_loader = DirectoryLoader(
-        #         data_directory, glob="./*.pdf", loader_cls=PyPDFLoader)
-        #     documents = pdf_loader.load() + txt_loader.load()
-        # else:
-        #     documents = txt_loader.load()
-        # documents = txt_loader.load()
-        # print("txt_documents = ", len(txt_loader.load()))
-
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=2000, chunk_overlap=50)
 
         texts = text_splitter.split_documents(documents)
-        print('text:', texts)
 
         embeddings = OpenAIEmbeddings()
-        # new_client = chromadb.PersistentClient()
-        # persistent_client = chromadb.PersistentClient()
-        # persistent_client.create_collection(str(create_hash(email)+str(bot_id)))
-
-        # new_client.get_or_create_collection(
-        #     str(create_hash(email)+str(bot_id)))
 
         docsearch = Chroma.from_documents(
             texts, embeddings, metadatas=[{"source": i} for i in range(len(texts))])
-        # print("embedding = ",embeddings)
 
-        print('doc serach:', docsearch)
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute(
@@ -313,13 +284,11 @@ def api_ask():
                 llm=llm, chain_type="stuff", memory=exist_conversation_chain.memory, prompt=prompt)
 
         with get_openai_callback() as cb:
-            # query = "Do you know about grillgrate?"
             docs = docsearch.similarity_search(query)
             conversation_chain(
                 {"input_documents": docs, "human_input": query}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
         memory.load_memory_variables({})
-        # new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         new_chain = pickle.dumps(conversation_chain)
         if chain is None:
             cursor.execute('INSERT INTO botchain(email, botid, chain) VALUES (%s, %s, %s) RETURNING *',
@@ -348,16 +317,12 @@ def api_ask():
         chat = cur.fetchone()
         chat_content = chat['chats']
         chat_content.append(newMessage)
-        # print(chat_content)
         updated_json_data_string = json.dumps(chat_content)
         cur.execute("UPDATE chats SET chats = %s WHERE email = %s AND bot_id = %s",
                     (updated_json_data_string, email, bot_id))
         connection.commit()
         cur.close()
         connection.close()
-
-        app.logger.debug(f"Query: {query}")
-        app.logger.debug(f"Response: {response}")
 
         return jsonify({'message': response}), 200
     except Exception as e:
@@ -444,7 +409,7 @@ def api_bot_delete():
         # Chroma.delete_collection(user_email_hash+str(bot_id))
         return jsonify({'message': 'Chatbot Deleted'}), 200
     except Exception as e:
-        print('Error: ' + str(e))
+        print('bot delete Error: ' + str(e))
         return jsonify({'message': 'bad request'}), 404
 
 
@@ -464,13 +429,13 @@ def verify_google_token(token):
             user_info = response.json()
             return user_info
         else:
-            print(f"Error: {response.status_code}")
+            print(f"verify google token error: {response.status_code}")
             return None
 
         # Assuming you have the access token in a variable called 'access_token'
 
     except Exception as e:
-        print("error:", str(e))
+        print("verify google token 2 error:", str(e))
         # Handle invalid token error
         return None
 
@@ -536,7 +501,6 @@ def api_newChat():
 
     try:
         requestInfo = dict(request.form)
-        print(requestInfo)
         auth_email = requestInfo.get('email')
         instance_name = requestInfo.get('instace_name')
         bot_name = f"{uuid.uuid1()}"
@@ -545,7 +509,6 @@ def api_newChat():
         urls_input = requestInfo.get('urls_input')
         bot_prompt = requestInfo.get('bot_prompt')
 
-        print('urls:', urls_input)
         filename = ''
         if bot_avatar:
             bot_avatar = bot_avatar.read()
@@ -560,7 +523,6 @@ def api_newChat():
             for file in files:
                 # file.save(data_directory + "/" + file.filename)
                 upload_files_size += file.seek(0, 2)
-                print('size:', upload_files_size)
 
                 file.seek(0)
                 s3.upload_fileobj(
@@ -573,11 +535,7 @@ def api_newChat():
                     }
                 )
 
-            print("uplad_files_size ============================ ",
-                  upload_files_size)
             data_path = f"data/{user_email_hash}"
-            folderSize = folder_size(data_path)
-            print('folder size:', folderSize)
             if upload_files_size + folder_size(data_path) > 10 * 1024 * 1024:
                 for file in files:
                     s3.delete_object(Bucket=environ.get('S3_BUCKET'),
@@ -588,8 +546,6 @@ def api_newChat():
             "question": "",
             "answer": ""
         }]
-
-        print("urls_input = ", urls_input)
 
         default_bot_prompt = "Your name is Smith and you are a very enthusiastic expert of the following information who loves to help people! You are a live chat agent for this company and people are communicating with you there. Your job is to answer their questions and direct them to the correct page on the website to find the information they're looking for. Answer the human's question using only the information provided and give a link at the end of your response to a page where they can find more information for what they're looking for. Limit your responses to 50 words. Do not answer questions unrelated to the context provided."
 
@@ -612,9 +568,7 @@ def api_newChat():
         chats_str = json.dumps(chats)
         cursor.execute('INSERT INTO chats (email, instance_name, bot_name, bot_avatar, pdf_file, urls, bot_prompt, bot_id, chats, complete) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *',
                        (email, instance_name, bot_name, psycopg2.Binary(bot_avatar), filename, urls_input, bot_prompt, bot_id, chats_str, 'false'))
-        new_created_chat = cursor.fetchone()
         connection.commit()
-        print(new_created_chat)
 
         cursor.execute('SELECT * FROM subscription where email = %s', (email,))
         subscription = cursor.fetchone()
@@ -631,7 +585,6 @@ def api_newChat():
             if (current_time > end_time):
                 urls = urls[:2]
 
-        print(len(urls))
         root_url = urljoin(urls[0], "/")
         scrape_urls(urls, root_url, email, bot_id)
 
@@ -645,7 +598,7 @@ def api_newChat():
 
         return jsonify({'message': 'Success Create'}), 200
     except Exception as e:
-        print('Error: ' + str(e))
+        print('create chat bot Error: ' + str(e))
         return jsonify({'message': 'Bad Request'}), 404
 
 
@@ -661,7 +614,6 @@ def delete_text_files(directory):
     objects = s3.list_objects_v2(
         Bucket=environ.get('S3_BUCKET'), Prefix=directory)
 
-    print('objee:', objects)
     if hasattr(objects, 'Contents'):
         for object in objects['Contents']:
             if object['Key'].lower().endswith(".txt"):
@@ -701,7 +653,6 @@ def api_updateChat():
         #     str(create_hash(email)+str(bot_id)))
         # new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         user_email_hash = create_hash(email)
-        print("file length = ", len(files))
         data_directory = f"data/{user_email_hash}/{bot_id}"
 
         # delete all related datas and history.
@@ -711,7 +662,6 @@ def api_updateChat():
 
         if len(files) > 0 or len(remove_files) > 0:  # pdf update
             if len(remove_files) > 0:
-                print("removeFiles ========", remove_files)
                 for remove_file in remove_files:
                     delete_pdf_files(data_directory, remove_file)
             if len(files) > 0:
@@ -731,8 +681,6 @@ def api_updateChat():
                         }
                     )
 
-                print("uplad_files_size ============================ ",
-                      upload_files_size)
                 data_path = f"data/{user_email_hash}"
                 if upload_files_size + folder_size(data_path) > 10 * 1024 * 1024:
                     for file in files:
@@ -756,7 +704,6 @@ def api_updateChat():
             return jsonify({'message': 'Update Success'}), 200
 
         else:  # normal update
-            print('normal update called')
             if custom_text != "":
                 filename = f"{data_directory}/custom_text.txt"
                 with open(filename, "w") as file:
@@ -788,7 +735,7 @@ def api_updateChat():
             return jsonify({'message': 'Update Success'}), 200
 
     except Exception as e:
-        print('Error: ' + str(e))
+        print('update chat bot Error: ' + str(e))
         # return jsonify({'message': 'Bad Request'}), 404
 
 
@@ -798,7 +745,6 @@ def api_getChatInfos():
     auth_email = requestInfo['email']
     headers = request.headers
     bearer = headers.get('Authorization')
-    print("bearer = ", bearer)
     try:
         token = bearer.split()[1]
         decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
@@ -820,10 +766,10 @@ def api_getChatInfos():
 
             return jsonify({'chats': chats})
         except Exception as e:
-            print('Error: ' + str(e))
+            print(' get chat bot 1 Error: ' + str(e))
             return jsonify({'message': 'chat does not exist'}), 404
     except Exception as e:
-        print('Error: ' + str(e))
+        print('get chat bot 2 Error: ' + str(e))
         return jsonify({'message': 'bad request'}), 404
 
 
@@ -831,7 +777,6 @@ def api_getChatInfos():
 def api_webhook():
     event = None
     payload = request.data
-    print("endpoint_secret = ", endpoint_secret)
     if endpoint_secret:
         sig_header = request.headers.get('Stripe-Signature')
         try:
@@ -844,7 +789,6 @@ def api_webhook():
 
     # Handle the event
      # Handle the event
-    # print("event-----",event)
     charge = session = invoice = customer = None
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
@@ -909,13 +853,10 @@ def api_getSubscription():
         selects = cursor.fetchall()
         connection.commit()
 
-        print(selects)
-
         if (len(selects) == 0):
             return jsonify({'customerId': '', 'subscriptionId': '', 'count': '1'})
         else:
             subscription = selects[len(selects)-1]
-            print("subscription = ", subscription)
             end_time = datetime.fromtimestamp(int(subscription['end_date']))
             current_time = datetime.now()
 
@@ -937,7 +878,7 @@ def api_getSubscription():
                 shutil.rmtree(data_directory)
                 return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'count': '1'})
     except Exception as e:
-        print('Error: ' + str(e))
+        print('get subscription Error: ' + str(e))
         return jsonify({'message': 'bad request'}), 404
 
 
@@ -983,7 +924,6 @@ def api_sendVerifyEmail():
         'expired_time': expiry_time.isoformat()
     }
     token = jwt.encode(payload, 'chatsavvy_secret', algorithm='HS256')
-    print("token = ", token)
     message = Mail(
         from_email='admin@beyondreach.ai',
         to_emails=email,
@@ -996,21 +936,18 @@ def api_sendVerifyEmail():
         sg.send(message)
         return jsonify({'status': True}), 200
     except Exception as e:
-        print("Error:", str(e))
+        print("send verify email Error:", str(e))
         return jsonify({'status': False}), 404
 
 
 @app.post('/api/verify/<token>')
 def verify_token(token):
-    print("token = ", token)
     try:
         decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
 
         email = decoded['email']
         expired_time = datetime.fromisoformat(decoded['expired_time'])
 
-        print('expired_time:', expired_time)
-        print('utc_time:', datetime.utcnow())
         if expired_time < datetime.utcnow():
             return jsonify({'message': 'Expired time out'}), 404
 
@@ -1019,7 +956,6 @@ def verify_token(token):
 
         cursor.execute('SELECT * FROM users WHERE email = %s', (email, ))
         user = cursor.fetchone()
-        print('user = ', user)
         if user is not None:
             payload = {
                 'email': email
@@ -1030,7 +966,6 @@ def verify_token(token):
         cursor.execute('INSERT INTO users(email) VALUES (%s) RETURNING *',
                        (email))
         new_created_user = cursor.fetchone()
-        print(new_created_user)
 
         connection.commit()
 
@@ -1110,7 +1045,7 @@ def cancelSubscription():
         shutil.rmtree(data_directory)
         return jsonify({'message': 'Success deleted'}), 200
     except Exception as e:
-        print("error:", str(e))
+        print("cancel subscription error:", str(e))
         return jsonify({'message': 'Bad request'}), 404
 
 
@@ -1169,7 +1104,6 @@ def getEmbedChatBotInfo():
     token = requestInfo['token']
     try:
         decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
-        print("decoded = ", decoded)
         email = decoded['email']
         subscription_id = decoded['subscription_id']
         customer_id = decoded['customer_id']
@@ -1187,21 +1121,16 @@ def getEmbedChatBotInfo():
             return jsonify({'message': 'Subscription does not exist'}), 404
 
         cursor.execute(
-            'SELECT * FROM subscription WHERE email = %s AND subscription_id = %s AND customer_id = %s', (email, subscription_id, customer_id))
-        subscription = cursor.fetchone()
+            "SELECT instance_name, bot_id, encode(bot_avatar, 'base64') AS avatar, pdf_file FROM chats WHERE email = %s AND bot_name = %s", (email, bot_name))
+        chat = cursor.fetchone()
 
-        cursor.execute('SELECT * FROM chats WHERE email = %s ', (email,))
-        chats = cursor.fetchall()
-
-        if chats is None:
+        if chat is None:
             return jsonify({'message': 'Chat does not exist'}), 404
 
-        print('bot_id ===========', chats[bot_name]['bot_id'])
-
-        return jsonify({'botName': chats[bot_name]['instance_name'], 'botId': chats[bot_name]['bot_id']}), 200
+        return jsonify({'botName': chat['instance_name'], 'botId': chat['bot_id'], 'avatar': chat['avatar'], 'color': chat['pdf_file']}), 200
 
     except Exception as e:
-        print("error:", str(e))
+        print("get embed chat bot info error:", str(e))
         return jsonify({'message': 'Bad request'}), 404
 
 
@@ -1210,12 +1139,13 @@ def embedChat():
     requestInfo = request.get_json()
     token = requestInfo['token']
     query = requestInfo['query']
-    bot_id = requestInfo['bot_id']
+    current_url = requestInfo['current_url']
     try:
         decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
         email = decoded['email']
         subscription_id = decoded['subscription_id']
         customer_id = decoded['customer_id']
+        bot_name = decoded['bot_name']
 
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
@@ -1228,47 +1158,50 @@ def embedChat():
         if subscription is None:
             return jsonify({'message': 'Subscription does not exist'}), 404
 
-        print("email = ", email)
-        print("bot_id = ", bot_id)
-
         cur = connection.cursor(cursor_factory=extras.RealDictCursor)
         cur.execute(
-            'SELECT * FROM chats WHERE email = %s AND bot_id = %s', (email, bot_id,))
+            'SELECT * FROM chats WHERE email = %s AND bot_name = %s', (email, bot_name))
         chat = cur.fetchone()
 
         if chat is None:
             return jsonify({'message': 'Chat does not exist'}), 404
 
         user_email_hash = create_hash(email)
-        print(user_email_hash)
-        data_directory = f"data//{user_email_hash}//{bot_id}"
-        print("query=", query)
-        print("bot_id=", bot_id)
-        print('data_directory = ', data_directory)
-        loader = DirectoryLoader(
-            data_directory, glob="./*.txt", loader_cls=TextLoader)
-        documents = loader.load()
-        print("documents = ", documents)
+        data_directory = f"data/{user_email_hash}/{chat['bot_id']}"
+        os.makedirs(name=data_directory, exist_ok=True)
 
+        response = s3.list_objects_v2(Bucket=environ.get(
+            'S3_BUCKET'), Prefix=data_directory)
+
+        documents = []
+        if 'Contents' in response:
+            for obj in response.get('Contents', []):
+                file_key = obj['Key']
+                try:
+                    s3.download_file(environ.get('S3_BUCKET'),
+                                     file_key, file_key)
+
+                    if file_key.lower().endswith(".pdf"):
+                        loader = PyPDFLoader(file_key)
+                    elif file_key.lower().endswith(".txt"):
+                        loader = TextLoader(file_key)
+                    # Use TextLoader to process text content
+                    documents += loader.load()
+                except:
+                    continue
         text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=200, chunk_overlap=30)
 
         texts = text_splitter.split_documents(documents)
-
         embeddings = OpenAIEmbeddings()
         # new_client = chromadb.PersistentClient()
-        print("emebdingCount", embeddings)
         # persistent_client = chromadb.PersistentClient()
         # persistent_client.create_collection(str(create_hash(email)+str(bot_id)))
         # new_client.create_collection(str(create_hash(email)+str(bot_id)))
         docsearch = Chroma.from_documents(texts, embeddings, metadatas=[
                                           {"source": i} for i in range(len(texts))])
-        print("embedding = ", embeddings)
-
-        connection = get_connection()
-        cur = connection.cursor(cursor_factory=extras.RealDictCursor)
         cur.execute(
-            'SELECT * FROM chats WHERE email = %s AND bot_id = %s', (email, bot_id))
+            'SELECT * FROM chats WHERE email = %s AND bot_name = %s', (email, bot_name))
         chat = cur.fetchone()
         bot_prompt = chat['bot_prompt']
 
@@ -1279,8 +1212,6 @@ def embedChat():
 
         Human: {human_input}
         Chatbot: """
-
-        print("template = ", template)
 
         prompt = PromptTemplate(
             template=template,
@@ -1294,7 +1225,6 @@ def embedChat():
         # cursor.execute(
         #     'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
         # chain = cursor.fetchone()
-        # print("chain ==", chain)
         # connection.commit()
         # test a message and log cost of API call
 
@@ -1307,12 +1237,10 @@ def embedChat():
         #     conversation_chain = load_qa_chain(llm=llm, chain_type="stuff", memory=exist_conversation_chain.memory, prompt=prompt)
 
         with get_openai_callback() as cb:
-            print("query ====", query)
             docs = docsearch.similarity_search(query)
             conversation_chain(
                 {"input_documents": docs, "human_input": query}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
-            print("cb ===== ", cb)
         memory.load_memory_variables({})
         # new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         # new_chain = pickle.dumps(conversation_chain)
@@ -1323,18 +1251,68 @@ def embedChat():
         #     cursor.execute('UPDATE botchain SET chain = %s WHERE email = %s AND botid = %s', (new_chain, email, bot_id, ))
         # connection.commit()
 
-        print("text = ", text),
-
         # Check if the response contains a link
         url_pattern = re.compile(r"(?P<url>https?://[^\s]+)")
 
         # replace URLs with anchor tags in the text
         response = url_pattern.sub(
             r"<a href='\g<url>' target='_blank' style='color: #0000FF'>\g<url></a>", text)
+        response = response.replace("[", "").replace("]", "")
+        response = response.replace("(", "").replace(")", "")
+        response = response.rstrip(".")
+
+        # replace URLs with anchor tags in the text
+        response = url_pattern.sub(
+            r"<a href='\g<url>' target='_blank' style='color: #0000FF'>\g<url></a>", text)
+
+        newMessage = {
+            "question": query,
+            "answer": response
+        }
+
+        cur.execute('SELECT * FROM embedhistory WHERE email = %s AND name = %s AND url = %s',
+                    (email, bot_name, current_url))
+        chat = cur.fetchone()
+        if chat is None:  # create new history
+            chatStr = json.dumps([newMessage])
+            cursor.execute('INSERT INTO embedhistory(email, name, url, chats) VALUES (%s, %s, %s, %s)',
+                           (email, bot_name, current_url, chatStr))
+        else:
+            chat_content = chat['chats']
+            chat_content.append(newMessage)
+            chatStr = json.dumps(chat_content)
+            cursor.execute('UPDATE embedhistory set chats = %s where email = %s and name = %s and url = %s',
+                           (chatStr, email, bot_name, current_url))
+        connection.commit()
+        cur.close()
+        cursor.close()
+        connection.close()
+
         return jsonify({'message': response}), 200
     except Exception as e:
-        print("error:", str(e))
+        print("embed chat error:", str(e))
         return jsonify({'message': 'Bad request'}), 404
+
+
+@app.get('/api/get_embed_chat_history')
+def get_embed_chat_history():
+    email = request.args.get('email')
+    name = request.args.get('bot_name')
+
+    try:
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor.execute(
+            'select * from embedhistory where email = %s and name = %s', (email, name))
+        chats = cursor.fetchall()
+        connection.commit()
+        cursor.close()
+        connection.close()
+
+        return jsonify({'chats': chats})
+    except Exception as e:
+        print('get embed chat error:', str(e))
+        return jsonify({'message': 'Error while getting embed chat'}), 404
 
 
 @app.post('/api/get_folder_size')
@@ -1353,13 +1331,11 @@ def get_size():
             return jsonify({'authentication': False}), 404
 
         user_email_hash = create_hash(email)
-        print(user_email_hash)
         data_directory = f"data/{user_email_hash}"
         total_size = folder_size(data_directory)
-        print("total_size = ", total_size/1024/1024)
         return jsonify({'size': total_size/1024/1024}), 200
     except Exception as e:
-        print("error:", str(e))
+        print("get folder size error:", str(e))
         return jsonify({'message': 'Bad request'}), 404
 
 
@@ -1379,7 +1355,6 @@ def get_pdf_files_name():
         if (email != auth_email):
             return jsonify({'authentication': False}), 404
         user_email_hash = create_hash(email)
-        print(user_email_hash)
         data_directory = f"data/{user_email_hash}/{bot_id}"
         pdf_files = []
 
@@ -1396,7 +1371,7 @@ def get_pdf_files_name():
         return jsonify({'names': pdf_files})
 
     except Exception as e:
-        print("error:", str(e))
+        print("get pdf file name error:", str(e))
         return jsonify({'message': 'Bad request'}), 404
 
 
@@ -1407,7 +1382,7 @@ def delete_pdf_files(data_directory, file_name):
         s3.delete_object(Bucket=environ.get('S3_BUCKET'),
                          Key=f"{data_directory}/{file_name}")
     except Exception as e:
-        print("error:", str(e))
+        print("delete pdf file error:", str(e))
 
 
 def folder_size(directory):
