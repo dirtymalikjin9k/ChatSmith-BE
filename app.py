@@ -1,3 +1,4 @@
+import sys
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
@@ -30,17 +31,14 @@ from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import PyPDFLoader, TextLoader
-from langchain.chains import ConversationalRetrievalChain
-from langchain.document_loaders import DirectoryLoader
-from langchain.document_loaders import S3DirectoryLoader
 from langchain.chat_models import ChatOpenAI
 from langchain.callbacks import get_openai_callback
 from langchain.memory import ConversationTokenBufferMemory
-from langchain.llms import OpenAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 
-import sys
+__import__('pysqlite3')
+
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 app = Flask(__name__, static_folder='build')
