@@ -445,9 +445,9 @@ def api_auth_googleLogin():
     requestInfo = request.get_json()
     email = requestInfo['email']
     credential = requestInfo['credential']
-
     try:
         responsePayload = verify_google_token(credential)
+        print('payload:', responsePayload)
         if responsePayload['email'] != email:
             return jsonify({'message': 'Bad request'}), 404
         connection = get_connection()
