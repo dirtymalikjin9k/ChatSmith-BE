@@ -37,8 +37,6 @@ from langchain.memory import ConversationTokenBufferMemory
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 
-embeddings = OpenAIEmbeddings()
-
 # below lines should be included on render.com
 __import__('pysqlite3')
 
@@ -243,10 +241,8 @@ def api_ask():
             chunk_size=2000, chunk_overlap=50)
 
         texts = text_splitter.split_documents(documents)
-        print('step 1')
         docsearch = Chroma.from_documents(
-            texts, embeddings)
-        print('step 2')
+            texts, OpenAIEmbeddings())
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute(
@@ -262,36 +258,29 @@ def api_ask():
         Human: {human_input}
         Chatbot: """
 
-        print('step 3')
         prompt = PromptTemplate(
             input_variables=["chat_history", "human_input", "context"],
             template=template
         )
 
-        print('step 4')
         llm = ChatOpenAI(model="gpt-3.5-turbo",
                          temperature=0.0)
 
         memory = ConversationTokenBufferMemory(
             llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
-        print('step 5')
         cursor.execute(
             'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
         chain = cursor.fetchone()
         connection.commit()
         if chain is None:
-            print('step 6')
             conversation_chain = load_qa_chain(
                 llm=llm, chain_type="stuff", memory=memory, prompt=prompt)
         else:
-            print('step 7')
             chain_memory = chain['chain']
             exist_conversation_chain = pickle.loads(bytes(chain_memory))
-            print('step 8')
             conversation_chain = load_qa_chain(
                 llm=llm, chain_type="stuff", memory=exist_conversation_chain.memory, prompt=prompt)
 
-        print('step 9')
         with get_openai_callback() as cb:
             docs = docsearch.similarity_search(query)
             conversation_chain(
@@ -1210,8 +1199,8 @@ def embedChat():
         # persistent_client = chromadb.PersistentClient()
         # persistent_client.create_collection(str(create_hash(email)+str(bot_id)))
         # new_client.create_collection(str(create_hash(email)+str(bot_id)))
-        docsearch = Chroma.from_documents(texts, embeddings, metadatas=[
-                                          {"source": i} for i in range(len(texts))])
+        # new_embedding = openai.Embedding.create()
+        docsearch = Chroma.from_documents(texts, OpenAIEmbeddings())
         cur.execute(
             'SELECT * FROM chats WHERE email = %s AND bot_name = %s', (email, bot_name))
         chat = cur.fetchone()
