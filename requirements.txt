@@ -22,6 +22,7 @@ botocore
 lxml
 uuid
 pandas==2.1.0
+pysqlite3-binary
 # google.oauth2
 # requests
 # bs4
