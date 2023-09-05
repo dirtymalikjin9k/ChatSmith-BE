@@ -447,17 +447,13 @@ def api_auth_googleLogin():
     credential = requestInfo['credential']
     try:
         responsePayload = verify_google_token(credential)
-        print('payload:', responsePayload)
         if responsePayload['email'] != email:
-            print('step 1')
             return jsonify({'message': 'Bad request'}), 404
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
 
-        print('step 2')
         cursor.execute('SELECT * FROM users WHERE email = %s', (email, ))
         user = cursor.fetchone()
-        print('step 3')
         if user is not None:
             payload = {
                 'email': email
@@ -465,9 +461,10 @@ def api_auth_googleLogin():
             token = jwt.encode(payload, 'chatsavvy_secret', algorithm='HS256')
             return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
 
-        cursor.execute('INSERT INTO users(email) VALUES (%s) RETURNING *',
-                       (email,))
-        new_created_user = cursor.fetchone()
+        cursor.execute('select id from users order by id DESC limit 1')
+        id = cursor.fetchone()
+        cursor.execute('INSERT INTO users(id, email) VALUES (%s, %s) RETURNING *',
+                       (id['id'] + 1, email,))
 
         connection.commit()
         cursor.close()
