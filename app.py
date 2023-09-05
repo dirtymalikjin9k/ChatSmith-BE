@@ -449,13 +449,15 @@ def api_auth_googleLogin():
         responsePayload = verify_google_token(credential)
         print('payload:', responsePayload)
         if responsePayload['email'] != email:
+            print('step 1')
             return jsonify({'message': 'Bad request'}), 404
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
 
+        print('step 2')
         cursor.execute('SELECT * FROM users WHERE email = %s', (email, ))
         user = cursor.fetchone()
-
+        print('step 3')
         if user is not None:
             payload = {
                 'email': email
@@ -479,6 +481,7 @@ def api_auth_googleLogin():
         return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
 
     except Exception as e:
+        print('step error', str(e))
         return jsonify({'message': 'Bad request'}), 404
 
 
