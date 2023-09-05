@@ -40,6 +40,9 @@ from langchain.llms import OpenAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
 app = Flask(__name__, static_folder='build')
 
 s3 = boto3.client("s3", aws_access_key_id=environ.get(
