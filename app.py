@@ -37,6 +37,9 @@ from langchain.memory import ConversationTokenBufferMemory
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 
+embeddings = OpenAIEmbeddings()
+
+# below lines should be included on render.com
 __import__('pysqlite3')
 
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
@@ -240,8 +243,6 @@ def api_ask():
             chunk_size=2000, chunk_overlap=50)
 
         texts = text_splitter.split_documents(documents)
-
-        embeddings = OpenAIEmbeddings()
         print('step 1')
         docsearch = Chroma.from_documents(
             texts, embeddings)
@@ -1205,7 +1206,6 @@ def embedChat():
             chunk_size=200, chunk_overlap=30)
 
         texts = text_splitter.split_documents(documents)
-        embeddings = OpenAIEmbeddings()
         # new_client = chromadb.PersistentClient()
         # persistent_client = chromadb.PersistentClient()
         # persistent_client.create_collection(str(create_hash(email)+str(bot_id)))
