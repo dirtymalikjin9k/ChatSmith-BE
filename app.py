@@ -205,6 +205,7 @@ def api_ask():
     headers = request.headers
     bearer = headers.get('Authorization')
     query = request.json['message_text']
+    print('chat called')
 
     try:
         token = bearer.split()[1]
@@ -243,6 +244,7 @@ def api_ask():
         texts = text_splitter.split_documents(documents)
         docsearch = Chroma.from_documents(
             texts, OpenAIEmbeddings())
+        print('get connection 1')
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute(
@@ -268,6 +270,7 @@ def api_ask():
 
         memory = ConversationTokenBufferMemory(
             llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
+        print('get connection 2')
         cursor.execute(
             'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
         chain = cursor.fetchone()
@@ -288,6 +291,7 @@ def api_ask():
             text = conversation_chain.memory.buffer[-1].content
         memory.load_memory_variables({})
         new_chain = pickle.dumps(conversation_chain)
+        print('connection 3', text)
         if chain is None:
             cursor.execute('INSERT INTO botchain(email, botid, chain) VALUES (%s, %s, %s) RETURNING *',
                            (email, bot_id, new_chain))
@@ -295,6 +299,7 @@ def api_ask():
             cursor.execute(
                 'UPDATE botchain SET chain = %s WHERE email = %s AND botid = %s', (new_chain, email, bot_id, ))
         connection.commit()
+        print('connection 4')
         # Check if the response contains a link
         url_pattern = re.compile(r"(?P<url>https?://[^\s]+)")
 
@@ -1420,4 +1425,4 @@ def run():
 
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    app.run(host='0.0.0.0', port=80, debug=False, threaded=True)
