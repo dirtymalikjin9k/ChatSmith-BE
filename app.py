@@ -1143,6 +1143,7 @@ def getEmbedChatBotInfo():
 
 @app.post('/api/embedChat')
 def embedChat():
+    print('embed caht called')
     requestInfo = request.get_json()
     token = requestInfo['token']
     query = requestInfo['query']
@@ -1206,6 +1207,7 @@ def embedChat():
         # new_client.create_collection(str(create_hash(email)+str(bot_id)))
         # new_embedding = openai.Embedding.create()
         docsearch = Chroma.from_documents(texts, OpenAIEmbeddings())
+        print('get embed con1')
         cur.execute(
             'SELECT * FROM chats WHERE email = %s AND bot_name = %s', (email, bot_name))
         chat = cur.fetchone()
@@ -1228,6 +1230,7 @@ def embedChat():
                          temperature=0)
         memory = ConversationTokenBufferMemory(
             llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
+        print('get embed con2')
         # cursor.execute(
         #     'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
         # chain = cursor.fetchone()
@@ -1247,6 +1250,8 @@ def embedChat():
             conversation_chain(
                 {"input_documents": docs, "human_input": query}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
+
+            print('get embed con3', text)
         memory.load_memory_variables({})
         # new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         # new_chain = pickle.dumps(conversation_chain)
