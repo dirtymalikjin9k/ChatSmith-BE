@@ -38,9 +38,9 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 
 # below lines should be included on render.com
-# __import__('pysqlite3')
+__import__('pysqlite3')
 
-# sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 app = Flask(__name__, static_folder='build')
 
