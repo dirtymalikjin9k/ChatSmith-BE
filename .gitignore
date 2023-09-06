@@ -9,6 +9,9 @@
 /.env
 /__pycache__
 /chroma
+# /.platform
+
+# .platform.app.yaml
 
 # testing
 /coverage
