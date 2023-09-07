@@ -205,7 +205,6 @@ def api_ask():
     headers = request.headers
     bearer = headers.get('Authorization')
     query = request.json['message_text']
-    print('chat called')
 
     try:
         token = bearer.split()[1]
@@ -244,7 +243,6 @@ def api_ask():
         texts = text_splitter.split_documents(documents)
         docsearch = Chroma.from_documents(
             texts, OpenAIEmbeddings())
-        print('get connection 1')
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute(
@@ -270,7 +268,6 @@ def api_ask():
 
         memory = ConversationTokenBufferMemory(
             llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
-        print('get connection 2')
         cursor.execute(
             'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
         chain = cursor.fetchone()
@@ -291,7 +288,6 @@ def api_ask():
             text = conversation_chain.memory.buffer[-1].content
         memory.load_memory_variables({})
         new_chain = pickle.dumps(conversation_chain)
-        print('connection 3', text)
         if chain is None:
             cursor.execute('INSERT INTO botchain(email, botid, chain) VALUES (%s, %s, %s) RETURNING *',
                            (email, bot_id, new_chain))
@@ -299,7 +295,6 @@ def api_ask():
             cursor.execute(
                 'UPDATE botchain SET chain = %s WHERE email = %s AND botid = %s', (new_chain, email, bot_id, ))
         connection.commit()
-        print('connection 4')
         # Check if the response contains a link
         url_pattern = re.compile(r"(?P<url>https?://[^\s]+)")
 
@@ -1207,7 +1202,6 @@ def embedChat():
         # new_client.create_collection(str(create_hash(email)+str(bot_id)))
         # new_embedding = openai.Embedding.create()
         docsearch = Chroma.from_documents(texts, OpenAIEmbeddings())
-        print('get embed con1')
         cur.execute(
             'SELECT * FROM chats WHERE email = %s AND bot_name = %s', (email, bot_name))
         chat = cur.fetchone()
@@ -1230,7 +1224,6 @@ def embedChat():
                          temperature=0)
         memory = ConversationTokenBufferMemory(
             llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
-        print('get embed con2')
         # cursor.execute(
         #     'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
         # chain = cursor.fetchone()
@@ -1251,7 +1244,6 @@ def embedChat():
                 {"input_documents": docs, "human_input": query}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
 
-            print('get embed con3', text)
         memory.load_memory_variables({})
         # new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         # new_chain = pickle.dumps(conversation_chain)
@@ -1307,7 +1299,7 @@ def embedChat():
         return jsonify({'message': 'Bad request'}), 404
 
 
-@app.get('/api/get_embed_chat_history')
+@app.get('/api/embed_chat_history')
 def get_embed_chat_history():
     # email = request.args.get('email')
     name = request.args.get('bot_name')
@@ -1322,10 +1314,28 @@ def get_embed_chat_history():
         cursor.close()
         connection.close()
 
-        return jsonify({'chats': chats})
+        return jsonify({'chats': chats}), 200
     except Exception as e:
         print('get embed chat error:', str(e))
         return jsonify({'message': 'Error while getting embed chat'}), 404
+
+
+@app.delete('/api/embed_chat_history')
+def delete_embed_chat_history():
+    id = request.args.get('id')
+
+    try:
+        connect = get_connection()
+        cursor = connect.cursor(cursor_factory=extras.RealDictCursor)
+        cursor.execute('delete from embedhistory where id = %s', (id, ))
+        connect.commit()
+        cursor.close()
+        connect.close()
+
+        return jsonify({'result': 'success'}), 200
+    except Exception as e:
+        print('delete embed chat history error:', str(e))
+        return jsonify({'message': 'Error while getting embed chat'}), 500
 
 
 @app.post('/api/get_folder_size')
