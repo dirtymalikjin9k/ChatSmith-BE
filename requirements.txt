@@ -16,7 +16,7 @@ openai==0.27.7
 stripe==5.4.0
 Werkzeug==2.3.4
 tiktoken
-gunicorn==19.7.1
+gunicorn
 boto3
 botocore
 lxml
