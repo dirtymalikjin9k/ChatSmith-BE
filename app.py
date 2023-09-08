@@ -117,6 +117,9 @@ def scrape_urls(urls, root_url, user_email, bot_id):
     unique_content = set()
     unique_urls = set()
 
+    dirs = os.path.dirname(f"{data_directory}/url{bot_id}.txt")
+    os.makedirs(dirs, exist_ok=True)
+
     try:
         for url in urls:
             # time.sleep(5)
@@ -155,11 +158,9 @@ def scrape_urls(urls, root_url, user_email, bot_id):
                 # Replace slashes with hyphens
                 path = path.replace("/", "-")
             # Create the directory if it doesn't exist
-            dirs = os.path.dirname(f"{data_directory}/{path}.txt")
-            os.makedirs(dirs, exist_ok=True)
 
             # # Write the page content and URLs to a file
-            with open(f"{data_directory}/{path}.txt", "w") as f:
+            with open(f"{data_directory}/url{bot_id}.txt", "a") as f:
                 f.write(f"{title}: {url}\n")
                 # time.sleep(5)
                 for line in content:
@@ -176,8 +177,8 @@ def scrape_urls(urls, root_url, user_email, bot_id):
                         f.write(f"{url}\n")
                 f.write("\n")
 
-            s3.upload_file(f"{data_directory}/{path}.txt", environ.get('S3_BUCKET'),
-                           f"{data_directory}/{path}.txt", ExtraArgs={'ACL': 'public-read'})
+        s3.upload_file(f"{data_directory}/url{bot_id}.txt", environ.get('S3_BUCKET'),
+                       f"{data_directory}/url{bot_id}.txt", ExtraArgs={'ACL': 'public-read'})
 
     except Exception as e:
         print('Error on scraping url: ' + str(e))
