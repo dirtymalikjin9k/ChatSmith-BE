@@ -863,7 +863,7 @@ def api_getSubscription():
             current_time = datetime.now()
 
             if end_time > current_time:
-                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'count': '10'})
+                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'count': '10000'})
             else:
                 cursor.execute('DELETE FROM subscription WHERE email = %s ',
                                (email, ))
