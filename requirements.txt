@@ -24,6 +24,7 @@ uuid
 pandas
 pysqlite3-binary
 waitress
+flask_socketio
 # google.oauth2
 # requests
 # bs4

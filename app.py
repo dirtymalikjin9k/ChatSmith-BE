@@ -26,6 +26,7 @@ import boto3
 import botocore
 import uuid
 from dotenv import load_dotenv
+from flask_socketio import SocketIO
 
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
@@ -36,6 +37,9 @@ from langchain.callbacks import get_openai_callback
 from langchain.memory import ConversationTokenBufferMemory
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
+from typing import Any, Dict, List
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+from langchain.schema import LLMResult
 
 # below lines should be included on render.com
 __import__('pysqlite3')
@@ -43,6 +47,8 @@ __import__('pysqlite3')
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 app = Flask(__name__, static_folder='build')
+app.config['CACHE_TYPE'] = "null"
+socketio = SocketIO(app=app, cors_allowed_origins="*")
 
 s3 = boto3.client("s3", aws_access_key_id=environ.get(
     'S3_KEY'), aws_secret_access_key=environ.get('S3_SECRET'))
@@ -52,7 +58,8 @@ load_dotenv()
 if environ.get('OPENAI_API_KEY') is not None:
     os.environ["OPENAI_API_KEY"] = environ.get('OPENAI_API_KEY')
 
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app, resources={r"/api/*": {"origins": "*"}},
+     origins="http://localhost:3000")
 
 os.makedirs("data", exist_ok=True)
 
@@ -68,6 +75,42 @@ port = environ.get('DB_PORT')
 dbname = environ.get('DB_NAME')
 user = environ.get('DB_USER')
 password = environ.get('DB_PASSWORD')
+
+
+class StreamingHandler(StreamingStdOutCallbackHandler):
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any) -> None:
+        print('started')
+        return super().on_llm_start(serialized=serialized, prompts=prompts)
+
+    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+        print(token)
+        handle_message(token=token)
+        return super().on_llm_new_token(token=token, kwargs=kwargs)
+
+    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
+        print('streamign ended')
+        return super().on_llm_end(response=response, kwargs=kwargs)
+
+
+class StreamingCallBack(StreamingStdOutCallbackHandler):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any) -> None:
+        print('started')
+        return super().on_llm_start(serialized, prompts, **kwargs)
+
+    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+        handle_message(token=token)
+        return super().on_llm_new_token(token, **kwargs)
+
+    def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
+        print('ended')
+        return super().on_llm_end(response, **kwargs)
 
 
 def get_connection():
@@ -198,6 +241,13 @@ def check_for_pdf_files(folder_path):
         return False
 
 
+@socketio.on('stream_new_token')
+def handle_message(token):
+    # Broadcast the message to all connected clients
+    print('calling? :', token)
+    socketio.emit('stream_new_token', token)
+
+
 @app.post('/api/chat')
 def api_ask():
     requestInfo = request.get_json()
@@ -265,6 +315,8 @@ def api_ask():
         )
 
         llm = ChatOpenAI(model="gpt-3.5-turbo",
+                         streaming=True,
+                         callbacks=[StreamingCallBack()],
                          temperature=0.0)
 
         memory = ConversationTokenBufferMemory(
@@ -283,6 +335,7 @@ def api_ask():
                 llm=llm, chain_type="stuff", memory=exist_conversation_chain.memory, prompt=prompt)
 
         with get_openai_callback() as cb:
+            print('cb:', cb)
             docs = docsearch.similarity_search(query)
             conversation_chain(
                 {"input_documents": docs, "human_input": query}, return_only_outputs=True)
@@ -1067,7 +1120,7 @@ def makeEmbedScriptToken():
         email = decoded['email']
 
         if (email != auth_email):
-            return jsonify({'authentication': False}), 404
+            return jsonify({'message': 'Authentication False'}), 403
 
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
@@ -1078,12 +1131,12 @@ def makeEmbedScriptToken():
         connection.commit()
 
         if subscription is None:
-            return jsonify({'message': 'Subscription does not exist'}), 404
+            return jsonify({'message': 'Subscription does not exist'}), 422
 
         end_time = datetime.fromtimestamp(int(subscription['end_date']))
         current_time = datetime.now()
         if end_time < current_time:
-            return jsonify({'message': 'Expired period'}), 404
+            return jsonify({'message': 'Expired period'}), 422
 
         payload = {
             'email': email,
