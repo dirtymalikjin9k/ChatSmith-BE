@@ -1297,6 +1297,8 @@ def embedChat():
         )
 
         llm = ChatOpenAI(model='gpt-3.5-turbo',
+                         streaming=True,
+                         callbacks=[StreamingCallBack(uniqueId)],
                          temperature=0)
         memory = ConversationTokenBufferMemory(
             llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
