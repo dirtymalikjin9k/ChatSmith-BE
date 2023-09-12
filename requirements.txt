@@ -25,8 +25,6 @@ pandas
 pysqlite3-binary
 waitress
 flask_socketio
-gevent-websocket
-eventlet
 # google.oauth2
 # requests
 # bs4
