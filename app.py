@@ -41,6 +41,8 @@ from typing import Any, Dict, List
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.schema import LLMResult
 
+# monkey.patch_all()
+
 # below lines should be included on render.com
 __import__('pysqlite3')
 
@@ -48,7 +50,9 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 app = Flask(__name__, static_folder='build')
 app.config['CACHE_TYPE'] = "null"
-socketio = SocketIO(app=app, cors_allowed_origins="*")
+socketio = SocketIO(app=app, cors_allowed_origins="*", async_mode="gevent")
+
+socketio.init_app(app, cors_allowed_origins="*")
 
 s3 = boto3.client("s3", aws_access_key_id=environ.get(
     'S3_KEY'), aws_secret_access_key=environ.get('S3_SECRET'))
