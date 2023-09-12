@@ -42,9 +42,9 @@ from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.schema import LLMResult
 
 # below lines should be included on render.com
-__import__('pysqlite3')
+# __import__('pysqlite3')
 
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+# sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 app = Flask(__name__, static_folder='build')
 app.config['CACHE_TYPE'] = "null"
@@ -58,8 +58,7 @@ load_dotenv()
 if environ.get('OPENAI_API_KEY') is not None:
     os.environ["OPENAI_API_KEY"] = environ.get('OPENAI_API_KEY')
 
-CORS(app, resources={r"/api/*": {"origins": "*"}},
-     origins="http://localhost:3000")
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 os.makedirs("data", exist_ok=True)
 
