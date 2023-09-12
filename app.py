@@ -50,8 +50,8 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 app = Flask(__name__, static_folder='build')
 app.config['CACHE_TYPE'] = "null"
-socketio = SocketIO(app=app, cors_allowed_origins="*",
-                    async_mode='gevent')
+socketio = SocketIO(app=app, cors_allowed_origins="*"
+                    ,async_mode='gevent')
 
 socketio.init_app(app, cors_allowed_origins="*")
 
@@ -105,7 +105,6 @@ class StreamingCallBack(StreamingStdOutCallbackHandler):
         super().__init__()
 
     def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any) -> None:
-        print('started')
         return super().on_llm_start(serialized, prompts, **kwargs)
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
@@ -113,7 +112,6 @@ class StreamingCallBack(StreamingStdOutCallbackHandler):
         return super().on_llm_new_token(token, **kwargs)
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
-        print('ended')
         return super().on_llm_end(response, **kwargs)
 
 
@@ -243,13 +241,30 @@ def check_for_pdf_files(folder_path):
         return True
     else:
         return False
+user_channels = {}
 
+@socketio.on('connect')
+def handle_connect():
+    user_id = request.sid
+    print('connected:', user_id)
+    user_channels[user_id] = f"user_{user_id}"
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    user_id = request.sid
+    print('disconnected:', user_id)
+    if user_id in user_channels:
+        del user_channels[user_id]
 
 @socketio.on('stream_new_token')
 def handle_message(token):
     # Broadcast the message to all connected clients
-    print('calling? :', token)
-    socketio.emit('stream_new_token', token)
+    user_id = request.sid
+    user_channel = user_channels.get(user_id)
+    if user_channel:
+        socketio.emit('stream_new_token', token, room=user_channel)
+    else:
+        print('error on not connected user called')
 
 
 @app.post('/api/chat')
