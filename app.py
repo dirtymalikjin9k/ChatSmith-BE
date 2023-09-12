@@ -40,8 +40,8 @@ from langchain.prompts import PromptTemplate
 from typing import Any, Dict, List
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.schema import LLMResult
-
-# monkey.patch_all()
+from gevent import monkey
+monkey.patch_all()
 
 # below lines should be included on render.com
 __import__('pysqlite3')
@@ -50,7 +50,8 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 app = Flask(__name__, static_folder='build')
 app.config['CACHE_TYPE'] = "null"
-socketio = SocketIO(app=app, cors_allowed_origins="*", async_mode="gevent")
+socketio = SocketIO(app=app, cors_allowed_origins="*",
+                    async_mode='gevent')
 
 socketio.init_app(app, cors_allowed_origins="*")
 
