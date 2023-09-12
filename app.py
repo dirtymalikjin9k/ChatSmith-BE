@@ -1,3 +1,5 @@
+import gevent.monkey
+gevent.monkey.patch_all()
 import sys
 import requests
 from bs4 import BeautifulSoup
@@ -27,7 +29,6 @@ import botocore
 import uuid
 from dotenv import load_dotenv
 from flask_socketio import SocketIO
-
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -40,13 +41,12 @@ from langchain.prompts import PromptTemplate
 from typing import Any, Dict, List
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.schema import LLMResult
-from gevent import monkey
-monkey.patch_all()
+
 
 # below lines should be included on render.com
-__import__('pysqlite3')
+# __import__('pysqlite3')
 
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+# sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 app = Flask(__name__, static_folder='build')
 app.config['CACHE_TYPE'] = "null"
