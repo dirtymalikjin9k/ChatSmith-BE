@@ -28,7 +28,7 @@ import boto3
 import botocore
 import uuid
 from dotenv import load_dotenv
-from flask_socketio import SocketIO
+from flask_socketio import SocketIO, join_room, leave_room, close_room, rooms
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -101,14 +101,17 @@ class StreamingHandler(StreamingStdOutCallbackHandler):
 
 
 class StreamingCallBack(StreamingStdOutCallbackHandler):
-    def __init__(self) -> None:
+    email = ''
+
+    def __init__(self, email) -> None:
+        self.email = email
         super().__init__()
 
     def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any) -> None:
         return super().on_llm_start(serialized, prompts, **kwargs)
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
-        handle_message(token=token)
+        handle_message(token=token, email=self.email)
         return super().on_llm_new_token(token, **kwargs)
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
@@ -241,30 +244,29 @@ def check_for_pdf_files(folder_path):
         return True
     else:
         return False
-user_channels = {}
+
+user_rooms = {}
+
+@socketio.on('join')
+def on_join(data):
+    username = data['username']
+    room = data['room']
+    user_rooms[username] = room
+    join_room(room)
+    print(username + ' has entered the room ', room)
 
 @socketio.on('connect')
 def handle_connect():
-    user_id = request.sid
-    print('connected:', user_id)
-    user_channels[user_id] = f"user_{user_id}"
+    print('connected:')
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    user_id = request.sid
-    print('disconnected:', user_id)
-    if user_id in user_channels:
-        del user_channels[user_id]
+    print('disconnected:')
 
 @socketio.on('stream_new_token')
-def handle_message(token):
-    # Broadcast the message to all connected clients
-    user_id = request.sid
-    user_channel = user_channels.get(user_id)
-    if user_channel:
-        socketio.emit('stream_new_token', token, room=user_channel)
-    else:
-        print('error on not connected user called')
+def handle_message(token, email):
+    room = user_rooms[email]
+    socketio.emit('stream_new_token', token, room=room)
 
 
 @app.post('/api/chat')
@@ -335,7 +337,7 @@ def api_ask():
 
         llm = ChatOpenAI(model="gpt-3.5-turbo",
                          streaming=True,
-                         callbacks=[StreamingCallBack()],
+                         callbacks=[StreamingCallBack(email)],
                          temperature=0.0)
 
         memory = ConversationTokenBufferMemory(
@@ -434,6 +436,7 @@ def api_chats_delte():
         else:
             return jsonify({'message': 'bad request'}), 404
     except Exception as e:
+        print('bot delet error:', str(e))
         return jsonify({'message': 'bad request'}), 404
 
 
