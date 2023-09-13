@@ -321,6 +321,8 @@ def api_ask():
             'SELECT * FROM chats WHERE email = %s AND bot_id = %s', (email, bot_id))
         chat = cursor.fetchone()
         bot_prompt = chat['bot_prompt']
+        bot_name = chat['bot_name']
+        uniqueId = chat['bot_name']
 
         template = bot_prompt + """
         {context}
@@ -393,6 +395,23 @@ def api_ask():
         updated_json_data_string = json.dumps(chat_content)
         cur.execute("UPDATE chats SET chats = %s WHERE email = %s AND bot_id = %s",
                     (updated_json_data_string, email, bot_id))
+        
+        # Insert into embedhistory to show in history tab
+        cur.execute('SELECT * FROM embedhistory WHERE email = %s AND name = %s AND url = %s',
+                    (email, bot_name, uniqueId))
+        chat = cur.fetchone()
+        now = datetime.now()
+        datestr = f"{now}"
+        if chat is None:  # create new history
+            chatStr = json.dumps([newMessage])
+            cursor.execute('INSERT INTO embedhistory(email, name, url, chats, create_time) VALUES (%s, %s, %s, %s, %s)',
+                           (email, bot_name, uniqueId, chatStr, datestr))
+        else:
+            chat_content = chat['chats']
+            chat_content.append(newMessage)
+            chatStr = json.dumps(chat_content)
+            cursor.execute('UPDATE embedhistory set chats = %s, create_time = %s where name = %s and url = %s',
+                           (chatStr, datestr, bot_name, uniqueId))
         connection.commit()
         cur.close()
         connection.close()
