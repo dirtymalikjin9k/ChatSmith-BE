@@ -1,5 +1,5 @@
 import gevent.monkey
-gevent.monkey.patch_all()
+# gevent.monkey.patch_all()
 import sys
 import requests
 from bs4 import BeautifulSoup
@@ -44,9 +44,9 @@ from langchain.schema import LLMResult
 
 
 # below lines should be included on render.com
-__import__('pysqlite3')
+# __import__('pysqlite3')
 
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+# sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 app = Flask(__name__, static_folder='build')
 app.config['CACHE_TYPE'] = "null"
@@ -885,7 +885,7 @@ def api_webhook():
             return jsonify(success=False)
 
     # Handle the event
-     # Handle the event
+    print('event:', event)
     charge = session = invoice = customer = None
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
