@@ -1,5 +1,5 @@
 import gevent.monkey
-# gevent.monkey.patch_all()
+gevent.monkey.patch_all()
 import sys
 import requests
 from bs4 import BeautifulSoup
@@ -44,9 +44,9 @@ from langchain.schema import LLMResult
 
 
 # below lines should be included on render.com
-# __import__('pysqlite3')
+__import__('pysqlite3')
 
-# sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 app = Flask(__name__, static_folder='build')
 app.config['CACHE_TYPE'] = "null"
@@ -538,6 +538,7 @@ def api_auth_googleLogin():
     requestInfo = request.get_json()
     email = requestInfo['email']
     credential = requestInfo['credential']
+    print('cred:', requestInfo)
     try:
         responsePayload = verify_google_token(credential)
         if responsePayload['email'] != email:
@@ -871,13 +872,13 @@ def api_getChatInfos():
 
 
 @app.post('/api/webhook')
-def api_webhook():
+async def api_webhook():
     event = None
     payload = request.data
     if endpoint_secret:
         sig_header = request.headers.get('Stripe-Signature')
         try:
-            event = stripe.Webhook.construct_event(
+            event = await stripe.Webhook.construct_event(
                 payload, sig_header, endpoint_secret
             )
         except stripe.error.SignatureVerificationError as e:
