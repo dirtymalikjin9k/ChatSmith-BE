@@ -69,7 +69,6 @@ os.makedirs("data", exist_ok=True)
 
 stripe.api_key = environ.get('STRIPE_API_KEY')
 
-# endpoint_secret = 'whsec_ef236d754b0c2badbd37c064994eddfa7a630c790b8407b1395cd8727f4fee6a'
 endpoint_secret = environ.get('END_POINT_SECRET')
 
 all_urls = set()
@@ -872,13 +871,13 @@ def api_getChatInfos():
 
 
 @app.post('/api/webhook')
-async def api_webhook():
+def api_webhook():
     event = None
     payload = request.data
     if endpoint_secret:
         sig_header = request.headers.get('Stripe-Signature')
         try:
-            event = await stripe.Webhook.construct_event(
+            event = stripe.Webhook.construct_event(
                 payload, sig_header, endpoint_secret
             )
         except stripe.error.SignatureVerificationError as e:
@@ -915,8 +914,22 @@ async def api_webhook():
         start_date = invoice['lines']['data'][0]['period']['start']
         end_date = invoice['lines']['data'][0]['period']['end']
 
-        cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date) VALUES (%s, %s, %s, %s, %s) RETURNING *',
-                       (email, customer_id, subscription_id, start_date, end_date))
+        payType = 'free'
+        if invoice['amount_due'] == 1900:
+            payType = 'hobby'
+        elif invoice['amount_due'] == 4900:
+            payType = 'standard'
+        elif invoice['amount_due'] == 9900:
+            payType = 'pro'
+        elif invoice['amount_due'] == 19000:
+            payType = 'hobby'
+        elif invoice['amount_due'] == 49000:
+            payType = 'standard'
+        elif invoice['amount_due'] == 99000:
+            payType = 'pro'
+
+        cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date, type) VALUES (%s, %s, %s, %s, %s, %s) RETURNING *',
+                       (email, customer_id, subscription_id, start_date, end_date, payType))
         new_created_user = cursor.fetchone()
         print(new_created_user)
 
@@ -950,16 +963,23 @@ def api_getSubscription():
 
         selects = cursor.fetchall()
         connection.commit()
+        cursor.execute('select * from plans where type = %s', ('free',))
+        plan = cursor.fetchone()
 
         if (len(selects) == 0):
-            return jsonify({'customerId': '', 'subscriptionId': '', 'count': '1'})
+            return jsonify({'customerId': '', 'subscriptionId': '', 'type': 'free', 'detail': plan['detail']})
         else:
             subscription = selects[len(selects)-1]
             end_time = datetime.fromtimestamp(int(subscription['end_date']))
             current_time = datetime.now()
 
             if end_time > current_time:
-                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'count': '10000'})
+                planType = subscription['type']
+                cursor.execute('select * from plans where type = %s', (planType,))
+                plan = cursor.fetchone()
+                connection.commit()
+
+                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': planType, 'detail': plan['detail']})
             else:
                 cursor.execute('DELETE FROM subscription WHERE email = %s ',
                                (email, ))
@@ -974,7 +994,7 @@ def api_getSubscription():
                 user_email_hash = create_hash(email)
                 data_directory = f"data/{user_email_hash}"
                 shutil.rmtree(data_directory)
-                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'count': '1'})
+                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': 'free', 'detail': plan['detail']})
     except Exception as e:
         print('get subscription Error: ' + str(e))
         return jsonify({'message': 'bad request'}), 404
