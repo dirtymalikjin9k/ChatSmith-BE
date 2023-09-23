@@ -1,47 +1,47 @@
+from calendar import monthrange
+from langchain.schema import LLMResult
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+from typing import Any, Dict, List
+from langchain.prompts import PromptTemplate
+from langchain.chains.question_answering import load_qa_chain
+from langchain.memory import ConversationTokenBufferMemory
+from langchain.callbacks import get_openai_callback
+from langchain.chat_models import ChatOpenAI
+from langchain.document_loaders import PyPDFLoader, TextLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.vectorstores import Chroma
+from langchain.embeddings import OpenAIEmbeddings
+from flask_socketio import SocketIO, join_room, leave_room, close_room, rooms
+from dotenv import load_dotenv
+import uuid
+import botocore
+import boto3
+import pickle
+import re
+from sendgrid.helpers.mail import Mail
+from sendgrid import SendGridAPIClient
+import jwt
+from datetime import datetime, timedelta, date
+import stripe
+import shutil
+import json
+from os import environ
+from psycopg2 import connect, extras
+from ask import delete_data_collection, delete_collection
+from flask_cors import CORS
+from flask import Flask, flash, render_template, request, redirect, url_for, jsonify, send_from_directory
+import hashlib
+import psycopg2
+import time
+import io
+import os
+from werkzeug.utils import secure_filename
+from urllib.parse import urljoin
+from bs4 import BeautifulSoup
+import requests
+import sys
 import gevent.monkey
 gevent.monkey.patch_all()
-import sys
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin
-from werkzeug.utils import secure_filename
-import os
-import io
-import time
-import psycopg2
-import hashlib
-from flask import Flask, flash, render_template, request, redirect, url_for, jsonify, send_from_directory
-from flask_cors import CORS
-from ask import delete_data_collection, delete_collection
-from psycopg2 import connect, extras
-from os import environ
-import json
-import shutil
-import stripe
-from datetime import datetime, timedelta, date
-import jwt
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
-import re
-import pickle
-import boto3
-import botocore
-import uuid
-from dotenv import load_dotenv
-from flask_socketio import SocketIO, join_room, leave_room, close_room, rooms
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import Chroma
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import PyPDFLoader, TextLoader
-from langchain.chat_models import ChatOpenAI
-from langchain.callbacks import get_openai_callback
-from langchain.memory import ConversationTokenBufferMemory
-from langchain.chains.question_answering import load_qa_chain
-from langchain.prompts import PromptTemplate
-from typing import Any, Dict, List
-from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-from langchain.schema import LLMResult
-from calendar import monthrange
 
 
 # below lines should be included on render.com
@@ -51,8 +51,8 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 app = Flask(__name__, static_folder='build')
 app.config['CACHE_TYPE'] = "null"
-socketio = SocketIO(app=app, cors_allowed_origins="*"
-async_mode='gevent')
+socketio = SocketIO(app=app, cors_allowed_origins="*",
+                    async_mode='gevent')
 
 socketio.init_app(app, cors_allowed_origins="*")
 
