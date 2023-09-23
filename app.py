@@ -18,7 +18,7 @@ from os import environ
 import json
 import shutil
 import stripe
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import jwt
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
@@ -41,6 +41,7 @@ from langchain.prompts import PromptTemplate
 from typing import Any, Dict, List
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.schema import LLMResult
+from calendar import monthrange
 
 
 # below lines should be included on render.com
@@ -51,7 +52,7 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 app = Flask(__name__, static_folder='build')
 app.config['CACHE_TYPE'] = "null"
 socketio = SocketIO(app=app, cors_allowed_origins="*"
-                    ,async_mode='gevent')
+async_mode='gevent')
 
 socketio.init_app(app, cors_allowed_origins="*")
 
@@ -157,6 +158,45 @@ def fetch_sitemap_urls(sitemap_url):
         return []
 
 
+def is_one_month(given_date, today):
+    print('give:', given_date)
+    print('today:', today)
+    x = today.month - 1
+    previous_month = 12 if x == 0 else x
+    year = today.year - 1 if x == 0 else today.year
+    last_day_of_previous_month = monthrange(year, previous_month)[1]
+    day = last_day_of_previous_month if today.day > last_day_of_previous_month else today.day
+    one_month_ago = date(year, previous_month, day)
+    print('one month ago:', one_month_ago)
+    if today.month == 2:
+        if given_date.month == today.month-1 and given_date.year == today.year and given_date.day >= 28:
+            print('not yet')
+            return False
+    if today.month == 4 or today.month == 6 or today.month == 9 or today.month == 11:
+        if given_date.month == today.month-1 and given_date.day == 31:
+            print('not yet')
+            return False
+    if one_month_ago == given_date:
+        print('exactly one month ago')
+        return True
+    else:
+        print('one month after or else:', one_month_ago - given_date)
+        return False
+
+
+def next_month(x):
+    try:
+        nextmonthdate = x.replace(month=x.month+1)
+    except ValueError:
+        if x.month == 12:
+            nextmonthdate = x.replace(year=x.year+1, month=1)
+        else:
+            # next month is too short to have "same date"
+            # pick your own heuristic, or re-raise the exception:
+            nextmonthdate = x + 30
+    return nextmonthdate
+
+
 def scrape_urls(urls, root_url, user_email, bot_id):
     user_email_hash = create_hash(user_email)
     data_directory = f"data/{user_email_hash}/{bot_id}"
@@ -244,7 +284,9 @@ def check_for_pdf_files(folder_path):
     else:
         return False
 
+
 user_rooms = {}
+
 
 @socketio.on('join')
 def on_join(data):
@@ -254,13 +296,16 @@ def on_join(data):
     join_room(room)
     print(username + ' has entered the room ', room)
 
+
 @socketio.on('connect')
 def handle_connect():
     print('connected:')
 
+
 @socketio.on('disconnect')
 def handle_disconnect():
     print('disconnected:')
+
 
 @socketio.on('stream_new_token')
 def handle_message(token, email):
@@ -276,12 +321,28 @@ def api_ask():
     headers = request.headers
     bearer = headers.get('Authorization')
     query = request.json['message_text']
-
     try:
         token = bearer.split()[1]
         decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
-
         email = decoded['email']
+        connection = get_connection()
+        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor.execute(
+            'SELECT * FROM subscription where email = %s order by id desc', (email,))
+        subscription = cursor.fetchone()
+        ts = datetime.now().timestamp()
+        if subscription is None:
+            cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date, type, message_left) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *',
+                           (email, '', '', ts, ts, 'free', 99))
+            connection.commit()
+
+        else:
+            leftCount = int(subscription['message_left']) - 1
+            cursor.execute(
+                'update subscription set message_left = %s where id = %s', (leftCount, subscription['id'],))
+            connection.commit()
+            if leftCount < 0:
+                return jsonify({'type': 'low_connect'}), 500
 
         if (email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
@@ -394,7 +455,7 @@ def api_ask():
         updated_json_data_string = json.dumps(chat_content)
         cur.execute("UPDATE chats SET chats = %s WHERE email = %s AND bot_id = %s",
                     (updated_json_data_string, email, bot_id))
-        
+
         # Insert into embedhistory to show in history tab
         cur.execute('SELECT * FROM embedhistory WHERE email = %s AND name = %s AND url = %s',
                     (email, bot_name, uniqueId))
@@ -928,8 +989,8 @@ def api_webhook():
         elif invoice['amount_due'] == 99000:
             payType = 'pro'
 
-        cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date, type) VALUES (%s, %s, %s, %s, %s, %s) RETURNING *',
-                       (email, customer_id, subscription_id, start_date, end_date, payType))
+        cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date, type, message_left) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *',
+                       (email, customer_id, subscription_id, start_date, end_date, payType, 100))
         new_created_user = cursor.fetchone()
         print(new_created_user)
 
@@ -967,19 +1028,30 @@ def api_getSubscription():
         plan = cursor.fetchone()
 
         if (len(selects) == 0):
-            return jsonify({'customerId': '', 'subscriptionId': '', 'type': 'free', 'detail': plan['detail']})
+            return jsonify({'customerId': '', 'subscriptionId': '', 'type': 'free', 'detail': plan['detail'], 'messageLeft': 100})
         else:
             subscription = selects[len(selects)-1]
             end_time = datetime.fromtimestamp(int(subscription['end_date']))
             current_time = datetime.now()
 
-            if end_time > current_time:
-                planType = subscription['type']
-                cursor.execute('select * from plans where type = %s', (planType,))
-                plan = cursor.fetchone()
+            if end_time.date() == current_time.date():
+                cursor.execute(
+                    'update subscription set message_left = %s, end_date = %s where id = %s', (int(plan['detail']['monthMessage']), next_month(current_time).timestamp(), subscription['id'],))
                 connection.commit()
 
-                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': planType, 'detail': plan['detail']})
+            if end_time > current_time:
+                planType = subscription['type']
+                cursor.execute(
+                    'select * from plans where type = %s', (planType,))
+                plan = cursor.fetchone()
+                connection.commit()
+                if subscription['message_left'] is None or int(subscription['message_left']) == 0:
+                    cursor.execute(
+                        'update subscription set message_left = %s where id = %s', (int(plan['detail']['monthMessage']), subscription['id'],))
+                    connection.commit()
+                    return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': planType, 'detail': plan['detail'], 'messageLeft': plan['detail']['monthMessage']})
+                else:
+                    return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': planType, 'detail': plan['detail'], 'messageLeft': subscription['message_left']})
             else:
                 cursor.execute('DELETE FROM subscription WHERE email = %s ',
                                (email, ))
