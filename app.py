@@ -325,6 +325,10 @@ def api_ask():
         token = bearer.split()[1]
         decoded = jwt.decode(token, 'chatsavvy_secret', algorithms="HS256")
         email = decoded['email']
+
+        if (email != auth_email):
+            return jsonify({'message': 'Authrization is faild'}), 404
+            
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute(
@@ -343,9 +347,6 @@ def api_ask():
             connection.commit()
             if leftCount < 0:
                 return jsonify({'type': 'low_connect'}), 500
-
-        if (email != auth_email):
-            return jsonify({'message': 'Authrization is faild'}), 404
 
         user_email_hash = create_hash(email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
@@ -1340,6 +1341,23 @@ def embedChat():
 
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor.execute(
+            'SELECT * FROM subscription where email = %s order by id desc', (email,))
+        subscription = cursor.fetchone()
+        ts = datetime.now().timestamp()
+        if subscription is None:
+            cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date, type, message_left) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *',
+                           (email, '', '', ts, ts, 'free', 99))
+            connection.commit()
+
+        else:
+            leftCount = int(subscription['message_left']) - 1
+            cursor.execute(
+                'update subscription set message_left = %s where id = %s', (leftCount, subscription['id'],))
+            connection.commit()
+            if leftCount < 0:
+                return jsonify({'type': 'low_connect'}), 500
+
 
         cursor.execute(
             'SELECT * FROM subscription WHERE email = %s AND subscription_id = %s AND customer_id = %s', (email, subscription_id, customer_id))
