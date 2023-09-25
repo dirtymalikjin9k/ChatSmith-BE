@@ -337,7 +337,7 @@ def api_ask():
         ts = datetime.now().timestamp()
         if subscription is None:
             cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date, type, message_left) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *',
-                           (email, '', '', ts, ts, 'free', 99))
+                           (email, '', '', ts, ts, 'free', 49))
             connection.commit()
 
         else:
@@ -990,8 +990,11 @@ def api_webhook():
         elif invoice['amount_due'] == 99000:
             payType = 'pro'
 
+        cursor.execute('select * from plans where type = %s', (payType,))
+        detail = cursor.fetchone()
+
         cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date, type, message_left) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *',
-                       (email, customer_id, subscription_id, start_date, end_date, payType, 100))
+                       (email, customer_id, subscription_id, start_date, end_date, payType, detail['detail']['monthMessage']))
         new_created_user = cursor.fetchone()
         print(new_created_user)
 
@@ -1029,7 +1032,12 @@ def api_getSubscription():
         plan = cursor.fetchone()
 
         if (len(selects) == 0):
-            return jsonify({'customerId': '', 'subscriptionId': '', 'type': 'free', 'detail': plan['detail'], 'messageLeft': 100})
+            print('only here called?')
+            ts = int(datetime.now().timestamp())
+            cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date, type, message_left) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *',
+                           (email, '', '', ts, ts, 'free', 50))
+            connection.commit()
+            return jsonify({'customerId': '', 'subscriptionId': '', 'type': 'free', 'detail': plan['detail'], 'messageLeft': 50})
         else:
             subscription = selects[len(selects)-1]
             end_time = datetime.fromtimestamp(int(subscription['end_date']))
@@ -1054,20 +1062,18 @@ def api_getSubscription():
                 else:
                     return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': planType, 'detail': plan['detail'], 'messageLeft': subscription['message_left']})
             else:
-                cursor.execute('DELETE FROM subscription WHERE email = %s ',
+                cursor.execute('select FROM subscription WHERE email = %s order by id desc',
                                (email, ))
-                connection.commit()
-
-                cursor.execute('DELETE FROM chats WHERE email = %s ',
-                               (email, ))
+                sub = cursor.fetchone()
+                print('sub:', sub)
                 connection.commit()
 
                 cursor.close()
                 connection.close()
-                user_email_hash = create_hash(email)
-                data_directory = f"data/{user_email_hash}"
-                shutil.rmtree(data_directory)
-                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': 'free', 'detail': plan['detail']})
+                # user_email_hash = create_hash(email)
+                # data_directory = f"data/{user_email_hash}"
+                # shutil.rmtree(data_directory)
+                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': 'free', 'detail': plan['detail'], 'messageLeft': sub['message_left']})
     except Exception as e:
         print('get subscription Error: ' + str(e))
         return jsonify({'message': 'bad request'}), 404
@@ -1347,7 +1353,7 @@ def embedChat():
         ts = datetime.now().timestamp()
         if subscription is None:
             cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date, type, message_left) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *',
-                           (email, '', '', ts, ts, 'free', 99))
+                           (email, '', '', ts, ts, 'free', 49))
             connection.commit()
 
         else:
