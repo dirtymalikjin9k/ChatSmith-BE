@@ -342,11 +342,11 @@ def api_ask():
 
         else:
             leftCount = int(subscription['message_left']) - 1
+            if leftCount < 0:
+                return jsonify({'type': 'low_connect'}), 500
             cursor.execute(
                 'update subscription set message_left = %s where id = %s', (leftCount, subscription['id'],))
             connection.commit()
-            if leftCount < 0:
-                return jsonify({'type': 'low_connect'}), 500
 
         user_email_hash = create_hash(email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
@@ -1357,11 +1357,11 @@ def embedChat():
 
         else:
             leftCount = int(subscription['message_left']) - 1
+            if leftCount < 0:
+                return jsonify({'type': 'low_connect'}), 500
             cursor.execute(
                 'update subscription set message_left = %s where id = %s', (leftCount, subscription['id'],))
             connection.commit()
-            if leftCount < 0:
-                return jsonify({'type': 'low_connect'}), 500
 
 
         cursor.execute(
