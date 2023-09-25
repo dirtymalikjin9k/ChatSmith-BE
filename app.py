@@ -993,10 +993,8 @@ def api_webhook():
         cursor.execute('select * from plans where type = %s', (payType,))
         detail = cursor.fetchone()
 
-        cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date, type, message_left) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *',
+        cursor.execute('update subscription set email = %s, customer_id = %s, subscription_id = %s, start_date = %s, end_date = %s, type = %s, message_left = %s',
                        (email, customer_id, subscription_id, start_date, end_date, payType, detail['detail']['monthMessage']))
-        new_created_user = cursor.fetchone()
-        print(new_created_user)
 
         connection.commit()
         cursor.close()
@@ -1024,14 +1022,14 @@ def api_getSubscription():
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         # try:
         cursor.execute(
-            'SELECT * FROM subscription WHERE email = %s ', (email,))
+            'SELECT * FROM subscription WHERE email = %s order by id desc', (email,))
 
-        selects = cursor.fetchall()
+        select = cursor.fetchone()
         connection.commit()
         cursor.execute('select * from plans where type = %s', ('free',))
         plan = cursor.fetchone()
 
-        if (len(selects) == 0):
+        if select is None:
             print('only here called?')
             ts = int(datetime.now().timestamp())
             cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date, type, message_left) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *',
@@ -1039,8 +1037,9 @@ def api_getSubscription():
             connection.commit()
             return jsonify({'customerId': '', 'subscriptionId': '', 'type': 'free', 'detail': plan['detail'], 'messageLeft': 50})
         else:
-            subscription = selects[len(selects)-1]
-            end_time = datetime.fromtimestamp(int(subscription['end_date']))
+            subscription = select
+            print('end:', subscription['end_date'])
+            end_time = datetime.fromtimestamp(float(subscription['end_date']))
             current_time = datetime.now()
 
             if end_time.date() == current_time.date():
