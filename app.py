@@ -947,8 +947,7 @@ def api_webhook():
             return jsonify(success=False)
 
     # Handle the event
-    print('event:', event)
-    charge = session = invoice = customer = None
+    charge = session = invoice = updated = deleted = None
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
         print("session = ", session)
@@ -959,14 +958,21 @@ def api_webhook():
         invoice = event['data']['object']
         print("invoice = ", invoice)
     # ... handle other event types
+    elif event['type'] == 'customer.subscription.updated':
+    # elif event['type'] == 'invoice.updated':
+        updated = event['data']['object']
+        print('updated:', updated)
+    elif event['type'] == 'customer.subscription.deleted':
+        deleted = event['data']['object']
+        print('deleted:', deleted)
     else:
         print('Unhandled event type {}'.format(event['type']))
 
     print("Webhook event recognized:", event['type'])
 
+    connection = get_connection()
+    cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
     if invoice:
-        connection = get_connection()
-        cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
 
         email = invoice['customer_email']
         print("email = ", email)
@@ -993,12 +999,38 @@ def api_webhook():
         cursor.execute('select * from plans where type = %s', (payType,))
         detail = cursor.fetchone()
 
-        cursor.execute('update subscription set email = %s, customer_id = %s, subscription_id = %s, start_date = %s, end_date = %s, type = %s, message_left = %s',
-                       (email, customer_id, subscription_id, start_date, end_date, payType, detail['detail']['monthMessage']))
+        cursor.execute('update subscription set customer_id = %s, subscription_id = %s, start_date = %s, end_date = %s, type = %s, message_left = %s where email = %s',
+                       (customer_id, subscription_id, start_date, end_date, payType, detail['detail']['monthMessage'], email))
 
-        connection.commit()
-        cursor.close()
-        connection.close()
+    if updated:
+        customer_id = updated['customer']
+        subscription_id = updated['items']['data'][0]['subscription']
+        amount = updated['items']['data'][0]['plan']['amount']
+        start_date = updated['current_period_start']
+        end_date = updated['current_period_end']
+        payType = 'free'
+        if amount == 1900:
+            payType = 'hobby'
+        elif amount == 4900:
+            payType = 'standard'
+        elif amount == 9900:
+            payType = 'pro'
+        elif amount == 19000:
+            payType = 'hobby'
+        elif amount == 49000:
+            payType = 'standard'
+        elif amount == 99000:
+            payType = 'pro'
+
+        cursor.execute('select * from plans where type = %s', (payType,))
+        detail = cursor.fetchone()
+
+        cursor.execute('update subscription set subscription_id = %s, start_date = %s, end_date = %s, type = %s, message_left = %s where customer_id = %s',
+                       (subscription_id, start_date, end_date, payType, detail['detail']['monthMessage'], customer_id))
+
+    connection.commit()
+    cursor.close()
+    connection.close()
 
     return jsonify(success=True)
 
@@ -1236,9 +1268,9 @@ def cancelSubscription():
 
         cursor.close()
         connection.close()
-        user_email_hash = create_hash(email)
-        data_directory = f"data/{user_email_hash}"
-        shutil.rmtree(data_directory)
+        # user_email_hash = create_hash(email)
+        # data_directory = f"data/{user_email_hash}"
+        # shutil.rmtree(data_directory)
         return jsonify({'message': 'Success deleted'}), 200
     except Exception as e:
         print("cancel subscription error:", str(e))
