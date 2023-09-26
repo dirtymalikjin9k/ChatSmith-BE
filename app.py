@@ -981,26 +981,34 @@ def api_webhook():
         print("customer_id = ", customer_id)
         start_date = invoice['lines']['data'][0]['period']['start']
         end_date = invoice['lines']['data'][0]['period']['end']
+        amount = invoice['lines']['data'][0]['amount']
 
         payType = 'free'
-        if invoice['amount_due'] == 1900:
+        period = 'monthly'
+        if amount == 1900:
             payType = 'hobby'
-        elif invoice['amount_due'] == 4900:
+            period = 'monthly'
+        elif amount == 4900:
             payType = 'standard'
-        elif invoice['amount_due'] == 9900:
+            period = 'monthly'
+        elif amount == 9900:
             payType = 'pro'
-        elif invoice['amount_due'] == 19000:
+            period = 'monthly'
+        elif amount == 19000:
             payType = 'hobby'
-        elif invoice['amount_due'] == 49000:
+            period = 'annually'
+        elif amount == 49000:
             payType = 'standard'
-        elif invoice['amount_due'] == 99000:
+            period = 'annually'
+        elif amount == 99000:
             payType = 'pro'
+            period = 'annually'
 
         cursor.execute('select * from plans where type = %s', (payType,))
         detail = cursor.fetchone()
 
-        cursor.execute('update subscription set customer_id = %s, subscription_id = %s, start_date = %s, end_date = %s, type = %s, message_left = %s where email = %s',
-                       (customer_id, subscription_id, start_date, end_date, payType, detail['detail']['monthMessage'], email))
+        cursor.execute('update subscription set customer_id = %s, subscription_id = %s, start_date = %s, end_date = %s, type = %s, message_left = %s, period = %s where email = %s',
+                       (customer_id, subscription_id, start_date, end_date, payType, detail['detail']['monthMessage'], period, email))
 
     if updated:
         customer_id = updated['customer']
@@ -1009,24 +1017,31 @@ def api_webhook():
         start_date = updated['current_period_start']
         end_date = updated['current_period_end']
         payType = 'free'
+        period = 'monthly'
         if amount == 1900:
             payType = 'hobby'
+            period = 'monthly'
         elif amount == 4900:
             payType = 'standard'
+            period = 'monthly'
         elif amount == 9900:
             payType = 'pro'
+            period = 'monthly'
         elif amount == 19000:
             payType = 'hobby'
+            period = 'annually'
         elif amount == 49000:
             payType = 'standard'
+            period = 'annually'
         elif amount == 99000:
             payType = 'pro'
+            period = 'annually'
 
         cursor.execute('select * from plans where type = %s', (payType,))
         detail = cursor.fetchone()
 
-        cursor.execute('update subscription set subscription_id = %s, start_date = %s, end_date = %s, type = %s, message_left = %s where customer_id = %s',
-                       (subscription_id, start_date, end_date, payType, detail['detail']['monthMessage'], customer_id))
+        cursor.execute('update subscription set subscription_id = %s, start_date = %s, end_date = %s, type = %s, message_left = %s, period = %s where customer_id = %s',
+                       (subscription_id, start_date, end_date, payType, detail['detail']['monthMessage'], period, customer_id))
 
     connection.commit()
     cursor.close()
@@ -1067,10 +1082,9 @@ def api_getSubscription():
             cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date, type, message_left) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *',
                            (email, '', '', ts, ts, 'free', 50))
             connection.commit()
-            return jsonify({'customerId': '', 'subscriptionId': '', 'type': 'free', 'detail': plan['detail'], 'messageLeft': 50})
+            return jsonify({'customerId': '', 'subscriptionId': '', 'type': 'free', 'period': 'month', 'detail': plan['detail'], 'messageLeft': 50})
         else:
             subscription = select
-            print('end:', subscription['end_date'])
             end_time = datetime.fromtimestamp(float(subscription['end_date']))
             current_time = datetime.now()
 
@@ -1089,9 +1103,9 @@ def api_getSubscription():
                     cursor.execute(
                         'update subscription set message_left = %s where id = %s', (int(plan['detail']['monthMessage']), subscription['id'],))
                     connection.commit()
-                    return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': planType, 'detail': plan['detail'], 'messageLeft': plan['detail']['monthMessage']})
+                    return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': planType, 'period': subscription['period'], 'detail': plan['detail'], 'messageLeft': plan['detail']['monthMessage']})
                 else:
-                    return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': planType, 'detail': plan['detail'], 'messageLeft': subscription['message_left']})
+                    return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': planType, 'period': subscription['period'], 'detail': plan['detail'], 'messageLeft': subscription['message_left']})
             else:
                 cursor.execute('select FROM subscription WHERE email = %s order by id desc',
                                (email, ))
@@ -1104,7 +1118,7 @@ def api_getSubscription():
                 # user_email_hash = create_hash(email)
                 # data_directory = f"data/{user_email_hash}"
                 # shutil.rmtree(data_directory)
-                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': 'free', 'detail': plan['detail'], 'messageLeft': sub['message_left']})
+                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': 'free', 'period': subscription['period'], 'detail': plan['detail'], 'messageLeft': sub['message_left']})
     except Exception as e:
         print('get subscription Error: ' + str(e))
         return jsonify({'message': 'bad request'}), 404
