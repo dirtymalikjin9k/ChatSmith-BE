@@ -985,7 +985,10 @@ def api_webhook():
 
         payType = 'free'
         period = 'monthly'
-        if amount == 1900:
+        if amount == 100:
+            payType = 'trial'
+            period = 'monthly'
+        elif amount == 1900:
             payType = 'hobby'
             period = 'monthly'
         elif amount == 4900:
@@ -1006,9 +1009,13 @@ def api_webhook():
 
         cursor.execute('select * from plans where type = %s', (payType,))
         detail = cursor.fetchone()
+        if payType == 'trial':
+            messageCount = 20
+        else:
+            messageCount = detail['detail']['monthMessage']
 
         cursor.execute('update subscription set customer_id = %s, subscription_id = %s, start_date = %s, end_date = %s, type = %s, message_left = %s, period = %s where email = %s',
-                       (customer_id, subscription_id, start_date, end_date, payType, detail['detail']['monthMessage'], period, email))
+                       (customer_id, subscription_id, start_date, end_date, payType, messageCount, period, email))
 
     if updated:
         customer_id = updated['customer']
@@ -1077,7 +1084,6 @@ def api_getSubscription():
         plan = cursor.fetchone()
 
         if select is None:
-            print('only here called?')
             ts = int(datetime.now().timestamp())
             cursor.execute('INSERT INTO subscription(email, customer_id, subscription_id, start_date, end_date, type, message_left) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *',
                            (email, '', '', ts, ts, 'free', 50))
