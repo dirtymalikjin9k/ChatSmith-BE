@@ -1105,13 +1105,13 @@ def api_getSubscription():
                     'select * from plans where type = %s', (planType,))
                 plan = cursor.fetchone()
                 connection.commit()
-                if subscription['message_left'] is None or int(subscription['message_left']) == 0:
-                    cursor.execute(
-                        'update subscription set message_left = %s where id = %s', (int(plan['detail']['monthMessage']), subscription['id'],))
-                    connection.commit()
-                    return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': planType, 'period': subscription['period'], 'detail': plan['detail'], 'messageLeft': plan['detail']['monthMessage']})
-                else:
-                    return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': planType, 'period': subscription['period'], 'detail': plan['detail'], 'messageLeft': subscription['message_left']})
+                # if subscription['message_left'] is None or int(subscription['message_left']) == 0:
+                    # cursor.execute(
+                    #     'update subscription set message_left = %s where id = %s', (int(plan['detail']['monthMessage']), subscription['id'],))
+                    # connection.commit()
+                    # return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': planType, 'period': subscription['period'], 'detail': plan['detail'], 'messageLeft': plan['detail']['monthMessage']})
+                # else:
+                return jsonify({'customerId': subscription['customer_id'], 'subscriptionId': subscription['subscription_id'], 'type': planType, 'period': subscription['period'], 'detail': plan['detail'], 'messageLeft': subscription['message_left']})
             else:
                 cursor.execute('select FROM subscription WHERE email = %s order by id desc',
                                (email, ))
