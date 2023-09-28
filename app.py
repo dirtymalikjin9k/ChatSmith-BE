@@ -1,5 +1,5 @@
 import gevent.monkey
-gevent.monkey.patch_all()
+# gevent.monkey.patch_all()
 import sys
 import requests
 from bs4 import BeautifulSoup
@@ -45,14 +45,14 @@ from calendar import monthrange
 
 
 # below lines should be included on render.com
-__import__('pysqlite3')
+# __import__('pysqlite3')
 
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+# sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 app = Flask(__name__, static_folder='build')
 app.config['CACHE_TYPE'] = "null"
-socketio = SocketIO(app=app, cors_allowed_origins="*"
-        , async_mode='gevent')
+socketio = SocketIO(app=app, cors_allowed_origins="*")
+        # , async_mode='gevent')
 
 socketio.init_app(app, cors_allowed_origins="*")
 
@@ -724,7 +724,7 @@ def api_newChat():
         chats_str = json.dumps(chats)
         now = f"{datetime.now()}"
         cursor.execute('INSERT INTO chats (email, instance_name, bot_name, bot_avatar, pdf_file, urls, bot_prompt, bot_id, chats, complete, created) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *',
-                       (email, instance_name, bot_name, psycopg2.Binary(bot_avatar), filename, urls_input, bot_prompt, bot_id, chats_str, 'false', now))
+                       (email, instance_name, bot_name, psycopg2.Binary(bot_avatar), filename, urls_input, bot_prompt, bot_id, chats_str, 'true', now))
         connection.commit()
 
         cursor.execute('SELECT * FROM subscription where email = %s', (email,))
@@ -736,7 +736,7 @@ def api_newChat():
         if (subscription is None):
             urls = urls[:2]
         else:
-            end_time = datetime.fromtimestamp(int(subscription['end_date']))
+            end_time = datetime.fromtimestamp(float(subscription['end_date']))
             current_time = datetime.now()
 
             if (current_time > end_time):
