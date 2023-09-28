@@ -1009,6 +1009,7 @@ def api_webhook():
             payType = 'pro'
             period = 'annually'
 
+        print('payType: ', payType, amount)
         cursor.execute('select * from plans where type = %s', (payType,))
         detail = cursor.fetchone()
         if payType == 'trial':
