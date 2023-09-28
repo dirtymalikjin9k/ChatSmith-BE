@@ -722,8 +722,9 @@ def api_newChat():
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         chats_str = json.dumps(chats)
-        cursor.execute('INSERT INTO chats (email, instance_name, bot_name, bot_avatar, pdf_file, urls, bot_prompt, bot_id, chats, complete) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *',
-                       (email, instance_name, bot_name, psycopg2.Binary(bot_avatar), filename, urls_input, bot_prompt, bot_id, chats_str, 'false'))
+        now = f"{datetime.now()}"
+        cursor.execute('INSERT INTO chats (email, instance_name, bot_name, bot_avatar, pdf_file, urls, bot_prompt, bot_id, chats, complete, created) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *',
+                       (email, instance_name, bot_name, psycopg2.Binary(bot_avatar), filename, urls_input, bot_prompt, bot_id, chats_str, 'false', now))
         connection.commit()
 
         cursor.execute('SELECT * FROM subscription where email = %s', (email,))
