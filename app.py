@@ -559,8 +559,8 @@ def api_bot_delete():
         for object in objects['Contents']:
             s3.delete_object(Bucket=environ.get(
                 'S3_BUCKET'), Key=object['Key'])
-        # shutil.rmtree(data_directory)
-        # Chroma.delete_collection(user_email_hash+str(bot_id))
+        shutil.rmtree(data_directory)
+        Chroma.delete_collection(user_email_hash+str(bot_id))
         return jsonify({'message': 'Chatbot Deleted'}), 200
     except Exception as e:
         print('bot delete Error: ' + str(e))
