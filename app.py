@@ -1028,7 +1028,10 @@ def api_webhook():
         end_date = updated['current_period_end']
         payType = 'free'
         period = 'monthly'
-        if amount == 1900:
+        if amount == 100:
+            payType = 'trial'
+            period = 'monthly'
+        elif amount == 1900:
             payType = 'hobby'
             period = 'monthly'
         elif amount == 4900:
@@ -1049,9 +1052,13 @@ def api_webhook():
 
         cursor.execute('select * from plans where type = %s', (payType,))
         detail = cursor.fetchone()
+        if payType == 'trial':
+            messageCount = 20
+        else:
+            messageCount = detail['detail']['monthMessage']
 
         cursor.execute('update subscription set subscription_id = %s, start_date = %s, end_date = %s, type = %s, message_left = %s, period = %s where customer_id = %s',
-                       (subscription_id, start_date, end_date, payType, detail['detail']['monthMessage'], period, customer_id))
+                       (subscription_id, start_date, end_date, payType, messageCount, period, customer_id))
 
     connection.commit()
     cursor.close()
