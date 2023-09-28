@@ -1,5 +1,5 @@
 import gevent.monkey
-# gevent.monkey.patch_all()
+gevent.monkey.patch_all()
 import sys
 import requests
 from bs4 import BeautifulSoup
@@ -45,14 +45,14 @@ from calendar import monthrange
 
 
 # below lines should be included on render.com
-# __import__('pysqlite3')
+__import__('pysqlite3')
 
-# sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 app = Flask(__name__, static_folder='build')
 app.config['CACHE_TYPE'] = "null"
-socketio = SocketIO(app=app, cors_allowed_origins="*")
-        # , async_mode='gevent')
+socketio = SocketIO(app=app, cors_allowed_origins="*"
+        , async_mode='gevent')
 
 socketio.init_app(app, cors_allowed_origins="*")
 
