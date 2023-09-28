@@ -618,8 +618,9 @@ def api_auth_googleLogin():
 
         cursor.execute('select id from users order by id DESC limit 1')
         id = cursor.fetchone()
+        newId = id['id'] + 1 if id is not None else 1
         cursor.execute('INSERT INTO users(id, email) VALUES (%s, %s) RETURNING *',
-                       (id['id'] + 1, email,))
+                       (newId, email,))
 
         connection.commit()
         cursor.close()
