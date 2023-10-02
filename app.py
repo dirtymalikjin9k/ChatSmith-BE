@@ -18,7 +18,6 @@ from os import environ
 import json
 import shutil
 import stripe
-import chromadb
 from datetime import datetime, timedelta, date
 import jwt
 from sendgrid import SendGridAPIClient
@@ -561,10 +560,7 @@ def api_bot_delete():
             s3.delete_object(Bucket=environ.get(
                 'S3_BUCKET'), Key=object['Key'])
         shutil.rmtree(data_directory)
-        new_client = chromadb.PersistentClient()
-        new_client.get_or_create_collection(
-            str(create_hash(email)+str(bot_id)))
-        new_client.delete_collection(str(create_hash(email)+str(bot_id)))
+        Chroma.delete_collection(user_email_hash+str(bot_id))
         return jsonify({'message': 'Chatbot Deleted'}), 200
     except Exception as e:
         print('bot delete Error: ' + str(e))
@@ -809,15 +805,15 @@ def api_updateChat():
 
         if (email != auth_email):
             return jsonify({'message': 'Authrization is faild'}), 404
+        # new_client = chromadb.PersistentClient()
+        # new_client.get_or_create_collection(
+        #     str(create_hash(email)+str(bot_id)))
+        # new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         user_email_hash = create_hash(email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
         try:
             shutil.rmtree(data_directory)
-            # Chroma.delete_collection(user_email_hash+str(bot_id))
-            new_client = chromadb.PersistentClient()
-            new_client.get_or_create_collection(
-                str(create_hash(email)+str(bot_id)))
-            new_client.delete_collection(str(create_hash(email)+str(bot_id)))
+            Chroma.delete_collection()
         except Exception as e:
             print('delete error:', e)
 
