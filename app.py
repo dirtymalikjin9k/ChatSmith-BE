@@ -388,13 +388,11 @@ def api_ask():
         template = bot_prompt + """
         {context}
 
-        {chat_history}
-
         Human: {human_input}
         Chatbot: """
 
         prompt = PromptTemplate(
-            input_variables=["chat_history", "human_input", "context"],
+            input_variables=["human_input", "context"],
             template=template
         )
 
@@ -404,7 +402,7 @@ def api_ask():
                          temperature=0.0)
 
         memory = ConversationTokenBufferMemory(
-            llm=llm, max_token_limit=5000, memory_key="no_history", input_key="human_input")
+            llm=llm, max_token_limit=5000, input_key="human_input")
         cursor.execute(
             'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
         chain = cursor.fetchone()
