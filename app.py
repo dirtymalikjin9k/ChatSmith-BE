@@ -388,11 +388,13 @@ def api_ask():
         template = bot_prompt + """
         {context}
 
+        {chat_history}
+
         Human: {human_input}
         Chatbot: """
 
         prompt = PromptTemplate(
-            input_variables=["human_input", "context"],
+            input_variables=["chat_history", "human_input", "context"],
             template=template
         )
 
@@ -402,7 +404,7 @@ def api_ask():
                          temperature=0.0)
 
         memory = ConversationTokenBufferMemory(
-            llm=llm, max_token_limit=5000, input_key="human_input")
+            llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
         cursor.execute(
             'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
         chain = cursor.fetchone()
@@ -420,7 +422,7 @@ def api_ask():
             print('cb:', cb)
             docs = docsearch.similarity_search(query)
             conversation_chain(
-                {"input_documents": docs, "human_input": query}, return_only_outputs=True)
+                {"input_documents": docs, "human_input": query, "chat_history": ""}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
         memory.load_memory_variables({})
         new_chain = pickle.dumps(conversation_chain)
@@ -558,7 +560,7 @@ def api_bot_delete():
             s3.delete_object(Bucket=environ.get(
                 'S3_BUCKET'), Key=object['Key'])
         shutil.rmtree(data_directory)
-        # Chroma.delete_collection(user_email_hash+str(bot_id))
+        Chroma.delete_collection(user_email_hash+str(bot_id))
         return jsonify({'message': 'Chatbot Deleted'}), 200
     except Exception as e:
         print('bot delete Error: ' + str(e))
@@ -811,7 +813,7 @@ def api_updateChat():
         data_directory = f"data/{user_email_hash}/{bot_id}"
         try:
             shutil.rmtree(data_directory)
-            # Chroma.delete_collection(self=Chroma)
+            Chroma.delete_collection(user_email_hash+str(bot_id))
         except Exception as e:
             print('delete error:', e)
 
@@ -1523,7 +1525,7 @@ def embedChat():
         with get_openai_callback() as cb:
             docs = docsearch.similarity_search(query)
             conversation_chain(
-                {"input_documents": docs, "human_input": query}, return_only_outputs=True)
+                {"input_documents": docs, "human_input": query, "chat_history": ""}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
 
         memory.load_memory_variables({})
