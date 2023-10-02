@@ -350,7 +350,6 @@ def api_ask():
 
         user_email_hash = create_hash(email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
-        shutil.rmtree(data_directory)
         os.makedirs(name=data_directory, exist_ok=True)
 
         response = s3.list_objects_v2(Bucket=environ.get(
@@ -405,7 +404,7 @@ def api_ask():
                          temperature=0.0)
 
         memory = ConversationTokenBufferMemory(
-            llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
+            llm=llm, max_token_limit=5000, input_key="human_input")
         cursor.execute(
             'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
         chain = cursor.fetchone()
