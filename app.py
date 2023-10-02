@@ -350,6 +350,7 @@ def api_ask():
 
         user_email_hash = create_hash(email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
+        shutil.rmtree(data_directory)
         os.makedirs(name=data_directory, exist_ok=True)
 
         response = s3.list_objects_v2(Bucket=environ.get(
@@ -560,7 +561,7 @@ def api_bot_delete():
             s3.delete_object(Bucket=environ.get(
                 'S3_BUCKET'), Key=object['Key'])
         shutil.rmtree(data_directory)
-        Chroma.delete_collection(user_email_hash+str(bot_id))
+        # Chroma.delete_collection(user_email_hash+str(bot_id))
         return jsonify({'message': 'Chatbot Deleted'}), 200
     except Exception as e:
         print('bot delete Error: ' + str(e))
@@ -813,7 +814,7 @@ def api_updateChat():
         data_directory = f"data/{user_email_hash}/{bot_id}"
         try:
             shutil.rmtree(data_directory)
-            Chroma.delete_collection()
+            # Chroma.delete_collection(self=Chroma)
         except Exception as e:
             print('delete error:', e)
 
