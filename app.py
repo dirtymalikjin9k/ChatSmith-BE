@@ -724,7 +724,7 @@ def api_newChat():
         chats_str = json.dumps(chats)
         now = f"{datetime.now()}"
         cursor.execute('INSERT INTO chats (email, instance_name, bot_name, bot_avatar, pdf_file, urls, bot_prompt, bot_id, chats, complete, created) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *',
-                       (email, instance_name, bot_name, psycopg2.Binary(bot_avatar), filename, urls_input, bot_prompt, bot_id, chats_str, 'true', now))
+                       (email, instance_name, bot_name, psycopg2.Binary(bot_avatar), filename, urls_input, bot_prompt, bot_id, chats_str, 'false', now))
         connection.commit()
 
         cursor.execute('SELECT * FROM subscription where email = %s', (email,))
@@ -811,11 +811,18 @@ def api_updateChat():
         # new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         user_email_hash = create_hash(email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
+        try:
+            shutil.rmtree(data_directory)
+            Chroma.delete_collection(user_email_hash+str(bot_id))
+        except Exception as e:
+            print('delete error:', e)
 
         # delete all related datas and history.
         delete_data_collection(email, bot_id)
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+        cursor.execute('UPDATE chats SET complete = %s WHERE email = %s AND bot_id = %s', ('false', email, bot_id))
+        connection.commit()
 
         if len(files) > 0 or len(remove_files) > 0:  # pdf update
             if len(remove_files) > 0:
@@ -838,6 +845,8 @@ def api_updateChat():
                         }
                     )
 
+                cursor.execute('UPDATE chats SET complete = %s WHERE email = %s AND bot_id = %s', ('true', email, bot_id))
+                connection.commit()
                 data_path = f"data/{user_email_hash}"
                 if upload_files_size + folder_size(data_path) > 10 * 1024 * 1024:
                     for file in files:
@@ -854,7 +863,7 @@ def api_updateChat():
             scrape_urls(urls, root_url, email, bot_id)
 
             cursor.execute(
-                "update chats set urls = %s where email = %s and bot_id = %s", (urls_input, email, bot_id))
+                "update chats set urls = %s, complete = %s where email = %s and bot_id = %s", (urls_input, 'true', email, bot_id))
             connection.commit()
             cursor.close()
             connection.close()
