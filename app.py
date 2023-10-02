@@ -1,5 +1,5 @@
 import gevent.monkey
-gevent.monkey.patch_all()
+# gevent.monkey.patch_all()
 import sys
 import requests
 from bs4 import BeautifulSoup
@@ -374,8 +374,9 @@ def api_ask():
             chunk_size=2000, chunk_overlap=50)
 
         texts = text_splitter.split_documents(documents)
-        docsearch = Chroma.from_documents(
-            texts, OpenAIEmbeddings())
+        print('texts:', texts)
+        docsearch = Chroma.from_documents(texts, OpenAIEmbeddings())
+        print('doc search:', docsearch)
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute(
@@ -560,7 +561,7 @@ def api_bot_delete():
             s3.delete_object(Bucket=environ.get(
                 'S3_BUCKET'), Key=object['Key'])
         shutil.rmtree(data_directory)
-        Chroma.delete_collection(user_email_hash+str(bot_id))
+        Chroma.delete_collection(name=f"{user_email_hash}{bot_id}")
         return jsonify({'message': 'Chatbot Deleted'}), 200
     except Exception as e:
         print('bot delete Error: ' + str(e))
