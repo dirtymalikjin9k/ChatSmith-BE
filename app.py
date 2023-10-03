@@ -375,7 +375,11 @@ def api_ask():
 
         texts = text_splitter.split_documents(documents)
         print('texts:', texts)
-        docsearch = Chroma(collection_name=user_email_hash, embedding_function=OpenAIEmbeddings()).from_documents(texts)
+        try:
+            Chroma.delete_collection(user_email_hash)
+        except Exception as e:
+            print('e:', e)
+        docsearch = Chroma(user_email_hash).from_documents(texts, OpenAIEmbeddings())
         # docsearch = Chroma.from_documents(texts, OpenAIEmbeddings())
         print('doc search:', docsearch)
         connection = get_connection()
