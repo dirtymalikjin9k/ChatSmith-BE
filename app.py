@@ -350,9 +350,12 @@ def api_ask():
 
         user_email_hash = create_hash(email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
-        shutil.rmtree(data_directory)
-        os.removedirs(data_directory)
-        os.makedirs(name=data_directory)
+        try:
+            shutil.rmtree(data_directory)
+            os.removedirs(data_directory)
+            os.makedirs(name=data_directory)
+        except Exception as e:
+            print('delete and make error:', e)
 
         response = s3.list_objects_v2(Bucket=environ.get(
             'S3_BUCKET'), Prefix=data_directory)
