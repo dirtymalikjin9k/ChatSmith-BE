@@ -375,12 +375,12 @@ def api_ask():
 
         texts = text_splitter.split_documents(documents)
         print('texts:', texts)
-        try:
-            Chroma.delete_collection(user_email_hash)
-        except Exception as e:
-            print('e:', e)
-        docsearch = Chroma(user_email_hash, OpenAIEmbeddings()).from_documents(texts, OpenAIEmbeddings())
-        # docsearch = Chroma.from_documents(texts, OpenAIEmbeddings())
+        # try:
+        #     Chroma.delete_collection(user_email_hash)
+        # except Exception as e:
+        #     print('e:', e)
+        # docsearch = Chroma(user_email_hash, OpenAIEmbeddings()).from_documents(texts, OpenAIEmbeddings())
+        docsearch = Chroma.from_documents(texts, OpenAIEmbeddings())
         print('doc search:', docsearch)
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
@@ -432,7 +432,7 @@ def api_ask():
 
         with get_openai_callback() as cb:
             print('cb:', cb)
-            docs = docsearch.similarity_search(query)
+            docs = docsearch.similarity_search(query, 1)
             print('doc:', docs)
             conversation_chain(
                 {"input_documents": docs, "human_input": query, "chat_history": ""}, return_only_outputs=True)
