@@ -815,11 +815,10 @@ def api_updateChat():
         # new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         user_email_hash = create_hash(email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
-        # try:
-        #     shutil.rmtree(data_directory)
-        #     os.removedirs(data_directory)
-        # except Exception as e:
-        #     print('delete error:', e)
+        try:
+            shutil.rmtree(data_directory)
+        except Exception as e:
+            print('delete error:', e)
 
         # delete all related datas and history.
         delete_data_collection(email, bot_id)
