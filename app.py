@@ -379,7 +379,7 @@ def api_ask():
             Chroma.delete_collection(user_email_hash)
         except Exception as e:
             print('e:', e)
-        docsearch = Chroma(user_email_hash).from_documents(texts, OpenAIEmbeddings())
+        docsearch = Chroma(user_email_hash, OpenAIEmbeddings()).from_documents(texts, OpenAIEmbeddings())
         # docsearch = Chroma.from_documents(texts, OpenAIEmbeddings())
         print('doc search:', docsearch)
         connection = get_connection()
