@@ -375,6 +375,10 @@ def api_ask():
 
         texts = text_splitter.split_documents(documents)
         print('texts:', texts)
+        try:
+            Chroma.delete_collection(Chroma(user_email_hash))
+        except Exception as e:
+            print('delete chroma error:', e)
         docsearch = Chroma(user_email_hash).from_documents(texts, OpenAIEmbeddings())
         print('doc search:', docsearch)
         connection = get_connection()
@@ -422,6 +426,7 @@ def api_ask():
         with get_openai_callback() as cb:
             print('cb:', cb)
             docs = docsearch.similarity_search(query)
+            print('docs:', docs)
             conversation_chain(
                 {"input_documents": docs, "human_input": query, "chat_history": ""}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
