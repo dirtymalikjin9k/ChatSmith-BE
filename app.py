@@ -428,6 +428,7 @@ def api_ask():
         with get_openai_callback() as cb:
             print('cb:', cb)
             docs = docsearch.similarity_search(query)
+            print('doc:', docs)
             conversation_chain(
                 {"input_documents": docs, "human_input": query, "chat_history": ""}, return_only_outputs=True)
             print('conversation chain memory:', conversation_chain.memory)
