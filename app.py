@@ -375,11 +375,7 @@ def api_ask():
 
         texts = text_splitter.split_documents(documents)
         print('texts:', texts)
-        try:
-            Chroma.delete_collection(data_directory)
-        except Exception as e:
-            print('delete colelction error:', e)
-        docsearch = Chroma(collection_name=data_directory, embedding_function=OpenAIEmbeddings()).from_documents(texts)
+        docsearch = Chroma(collection_name=email, embedding_function=OpenAIEmbeddings()).from_documents(texts)
         # docsearch = Chroma.from_documents(texts, OpenAIEmbeddings())
         print('doc search:', docsearch)
         connection = get_connection()
