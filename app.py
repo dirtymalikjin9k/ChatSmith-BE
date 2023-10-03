@@ -358,14 +358,16 @@ def api_ask():
         documents = []
         for obj in response.get('Contents', []):
             file_key = obj['Key']
+            print('filekey:', file_key)
             try:
-                os.remove(file_key)
-                s3.download_file(environ.get('S3_BUCKET'), file_key, file_key)
+                newFileName = f"data/{uuid.uuid4()}"
+                print('new file name:', newFileName)
+                s3.download_file(environ.get('S3_BUCKET'), file_key, newFileName)
 
                 if file_key.lower().endswith(".pdf"):
-                    loader = PyPDFLoader(file_key)
+                    loader = PyPDFLoader(newFileName)
                 elif file_key.lower().endswith(".txt"):
-                    loader = TextLoader(file_key)
+                    loader = TextLoader(newFileName)
                 # Use TextLoader to process text content
                 documents += loader.load()
             except:
