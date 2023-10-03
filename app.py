@@ -375,7 +375,9 @@ def api_ask():
 
         texts = text_splitter.split_documents(documents)
         print('texts:', texts)
-        docsearch = Chroma.from_documents(texts, OpenAIEmbeddings())
+        Chroma.delete_collection(data_directory)
+        docsearch = Chroma(collection_name=data_directory, embedding_function=OpenAIEmbeddings()).from_documents(texts)
+        # docsearch = Chroma.from_documents(texts, OpenAIEmbeddings())
         print('doc search:', docsearch)
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
@@ -409,21 +411,21 @@ def api_ask():
         memory = ConversationTokenBufferMemory(
             llm=llm, max_token_limit=5000, memory_key="chat_history", input_key="human_input")
         print('momeory', memory)
-        # cursor.execute(
-            # 'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
-        # chain = cursor.fetchone()
-        # connection.commit()
-        # if chain is None:
-        print('chain 1 called')
-        conversation_chain = load_qa_chain(
-            llm=llm, chain_type="stuff", memory=memory, prompt=prompt)
-        # else:
-        #     print('chain 2 called')
-        #     chain_memory = chain['chain']
-        #     print('chain memory:', chain_memory)
-        #     exist_conversation_chain = pickle.loads(bytes(chain_memory))
-        #     conversation_chain = load_qa_chain(
-        #         llm=llm, chain_type="stuff", memory=exist_conversation_chain.memory, prompt=prompt)
+        cursor.execute(
+            'SELECT * FROM botchain WHERE botid = %s AND email = %s', (bot_id, email,))
+        chain = cursor.fetchone()
+        connection.commit()
+        if chain is None:
+            print('chain 1 called')
+            conversation_chain = load_qa_chain(
+                llm=llm, chain_type="stuff", memory=memory, prompt=prompt)
+        else:
+            print('chain 2 called')
+            chain_memory = chain['chain']
+            print('chain memory:', chain_memory)
+            exist_conversation_chain = pickle.loads(bytes(chain_memory))
+            conversation_chain = load_qa_chain(
+                llm=llm, chain_type="stuff", memory=exist_conversation_chain.memory, prompt=prompt)
 
         with get_openai_callback() as cb:
             print('cb:', cb)
@@ -434,14 +436,14 @@ def api_ask():
             print('conversation chain memory:', conversation_chain.memory)
             text = conversation_chain.memory.buffer[-1].content
         memory.load_memory_variables({})
-        # new_chain = pickle.dumps(conversation_chain)
-        # if chain is None:
-        #     cursor.execute('INSERT INTO botchain(email, botid, chain) VALUES (%s, %s, %s) RETURNING *',
-        #                    (email, bot_id, new_chain))
-        # else:
-        #     cursor.execute(
-        #         'UPDATE botchain SET chain = %s WHERE email = %s AND botid = %s', (new_chain, email, bot_id, ))
-        # connection.commit()
+        new_chain = pickle.dumps(conversation_chain)
+        if chain is None:
+            cursor.execute('INSERT INTO botchain(email, botid, chain) VALUES (%s, %s, %s) RETURNING *',
+                           (email, bot_id, new_chain))
+        else:
+            cursor.execute(
+                'UPDATE botchain SET chain = %s WHERE email = %s AND botid = %s', (new_chain, email, bot_id, ))
+        connection.commit()
         # Check if the response contains a link
         url_pattern = re.compile(r"(?P<url>https?://[^\s]+)")
 
