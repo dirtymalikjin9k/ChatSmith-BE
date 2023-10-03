@@ -1522,14 +1522,14 @@ def embedChat():
 
         # if chain is None:
         conversation_chain = load_qa_chain(
-            llm=llm, chain_type="stuff", memory=memory, prompt=prompt)
+            llm=llm, chain_type="stuff", prompt=prompt)
         # else:
         #     chain_memory = chain['chain']
         #     exist_conversation_chain = pickle.loads(bytes(chain_memory))
         #     conversation_chain = load_qa_chain(llm=llm, chain_type="stuff", memory=exist_conversation_chain.memory, prompt=prompt)
 
         with get_openai_callback() as cb:
-            docs = docsearch.similarity_search(query)
+            docs = docsearch.similarity_search(query, 1)
             conversation_chain(
                 {"input_documents": docs, "human_input": query, "chat_history": ""}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
