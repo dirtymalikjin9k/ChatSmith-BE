@@ -350,12 +350,7 @@ def api_ask():
 
         user_email_hash = create_hash(email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
-        try:
-            shutil.rmtree(data_directory)
-            os.removedirs(data_directory)
-            os.makedirs(name=data_directory)
-        except Exception as e:
-            print('delete and make error:', e)
+        os.makedirs(name=data_directory, exist_ok=True)
 
         response = s3.list_objects_v2(Bucket=environ.get(
             'S3_BUCKET'), Prefix=data_directory)
@@ -364,6 +359,7 @@ def api_ask():
         for obj in response.get('Contents', []):
             file_key = obj['Key']
             try:
+                os.remove(file_key)
                 s3.download_file(environ.get('S3_BUCKET'), file_key, file_key)
 
                 if file_key.lower().endswith(".pdf"):
@@ -817,11 +813,11 @@ def api_updateChat():
         # new_client.delete_collection(str(create_hash(email)+str(bot_id)))
         user_email_hash = create_hash(email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
-        try:
-            shutil.rmtree(data_directory)
-            os.removedirs(data_directory)
-        except Exception as e:
-            print('delete error:', e)
+        # try:
+        #     shutil.rmtree(data_directory)
+        #     os.removedirs(data_directory)
+        # except Exception as e:
+        #     print('delete error:', e)
 
         # delete all related datas and history.
         delete_data_collection(email, bot_id)
