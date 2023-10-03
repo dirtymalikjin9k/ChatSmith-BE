@@ -350,7 +350,9 @@ def api_ask():
 
         user_email_hash = create_hash(email)
         data_directory = f"data/{user_email_hash}/{bot_id}"
-        os.makedirs(name=data_directory, exist_ok=True)
+        shutil.rmtree(data_directory)
+        os.removedirs(data_directory)
+        os.makedirs(name=data_directory)
 
         response = s3.list_objects_v2(Bucket=environ.get(
             'S3_BUCKET'), Prefix=data_directory)
@@ -375,10 +377,6 @@ def api_ask():
 
         texts = text_splitter.split_documents(documents)
         print('texts:', texts)
-        try:
-            Chroma.delete_collection(Chroma(user_email_hash))
-        except Exception as e:
-            print('delete chroma error:', e)
         docsearch = Chroma(user_email_hash).from_documents(texts, OpenAIEmbeddings())
         print('doc search:', docsearch)
         connection = get_connection()
@@ -1522,14 +1520,14 @@ def embedChat():
 
         # if chain is None:
         conversation_chain = load_qa_chain(
-            llm=llm, chain_type="stuff", prompt=prompt)
+            llm=llm, chain_type="stuff", memory=memory, prompt=prompt)
         # else:
         #     chain_memory = chain['chain']
         #     exist_conversation_chain = pickle.loads(bytes(chain_memory))
         #     conversation_chain = load_qa_chain(llm=llm, chain_type="stuff", memory=exist_conversation_chain.memory, prompt=prompt)
 
         with get_openai_callback() as cb:
-            docs = docsearch.similarity_search(query, 1)
+            docs = docsearch.similarity_search(query)
             conversation_chain(
                 {"input_documents": docs, "human_input": query, "chat_history": ""}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
