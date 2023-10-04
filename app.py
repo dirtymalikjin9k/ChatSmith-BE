@@ -358,10 +358,8 @@ def api_ask():
         documents = []
         for obj in response.get('Contents', []):
             file_key = obj['Key']
-            print('filekey:', file_key)
             try:
                 newFileName = f"data/{uuid.uuid4()}"
-                print('new file name:', newFileName)
                 s3.download_file(environ.get('S3_BUCKET'), file_key, newFileName)
 
                 if file_key.lower().endswith(".pdf"):
@@ -370,6 +368,7 @@ def api_ask():
                     loader = TextLoader(newFileName)
                 # Use TextLoader to process text content
                 documents += loader.load()
+                os.remove(newFileName)
             except:
                 continue
 
@@ -377,9 +376,7 @@ def api_ask():
             chunk_size=2000, chunk_overlap=50)
 
         texts = text_splitter.split_documents(documents)
-        print('texts:', texts)
         docsearch = Chroma(user_email_hash).from_documents(texts, OpenAIEmbeddings())
-        print('doc search:', docsearch)
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
         cursor.execute(
@@ -423,9 +420,7 @@ def api_ask():
                 llm=llm, chain_type="stuff", memory=exist_conversation_chain.memory, prompt=prompt)
 
         with get_openai_callback() as cb:
-            print('cb:', cb)
             docs = docsearch.similarity_search(query)
-            print('docs:', docs)
             conversation_chain(
                 {"input_documents": docs, "human_input": query, "chat_history": ""}, return_only_outputs=True)
             text = conversation_chain.memory.buffer[-1].content
@@ -463,21 +458,27 @@ def api_ask():
                     (updated_json_data_string, email, bot_id))
 
         # Insert into embedhistory to show in history tab
-        cur.execute('SELECT * FROM embedhistory WHERE email = %s AND name = %s AND url = %s',
-                    (email, bot_name, uniqueId))
+        cur.execute('select chat_id from bot_id_history where bot_name = %s', (bot_name,))
+        chatId = cur.fetchone()
+        chatNumber = '0'
+        if chatId is not None:
+            chatNumber = f"{int(chatId['chat_id']) + 1}"
+
+        cur.execute('SELECT * FROM embedhistory WHERE email = %s AND name = %s AND url = %s and chat_id = %s',
+                    (email, bot_name, uniqueId, chatNumber,))
         chat = cur.fetchone()
         now = datetime.now()
         datestr = f"{now}"
         if chat is None:  # create new history
             chatStr = json.dumps([newMessage])
-            cursor.execute('INSERT INTO embedhistory(email, name, url, chats, create_time) VALUES (%s, %s, %s, %s, %s)',
-                           (email, bot_name, uniqueId, chatStr, datestr))
+            cursor.execute('INSERT INTO embedhistory(email, name, url, chats, create_time, chat_id) VALUES (%s, %s, %s, %s, %s, %s)',
+                           (email, bot_name, uniqueId, chatStr, datestr, chatNumber,))
         else:
             chat_content = chat['chats']
             chat_content.append(newMessage)
             chatStr = json.dumps(chat_content)
-            cursor.execute('UPDATE embedhistory set chats = %s, create_time = %s where name = %s and url = %s',
-                           (chatStr, datestr, bot_name, uniqueId))
+            cursor.execute('UPDATE embedhistory set chats = %s, create_time = %s where name = %s and url = %s and chat_id = %s',
+                           (chatStr, datestr, bot_name, uniqueId, chatNumber))
         connection.commit()
         cur.close()
         connection.close()
@@ -514,6 +515,20 @@ def api_chats_delte():
         cursor.execute('DELETE FROM botchain WHERE email = %s AND botid = %s',
                        (email, bot_id))
         connection.commit()
+
+        cursor.execute('select bot_name from chats where email = %s and bot_id = %s', (email, bot_id))
+        bot = cursor.fetchone()
+        botname = bot['bot_name']
+        cursor.execute('select chat_id from bot_id_history where bot_name = %s', (botname,))
+        chatId = cursor.fetchone()
+
+        if chatId is None:
+            cursor.execute('insert into bot_id_history(bot_name, chat_id) values (%s, %s)', (botname, '0',))
+            connection.commit()
+        else:
+            cursor.execute('update bot_id_history set chat_id = %s where bot_name = %s', (f"{int(chatId['chat_id']) + 1}", botname))
+            connection.commit()
+
         cursor.close()
         connection.close()
         if response:
@@ -1466,15 +1481,17 @@ def embedChat():
             for obj in response.get('Contents', []):
                 file_key = obj['Key']
                 try:
+                    newFileName = f"data/{uuid.uuid4()}"
                     s3.download_file(environ.get('S3_BUCKET'),
-                                     file_key, file_key)
+                                     file_key, newFileName)
 
                     if file_key.lower().endswith(".pdf"):
-                        loader = PyPDFLoader(file_key)
+                        loader = PyPDFLoader(newFileName)
                     elif file_key.lower().endswith(".txt"):
-                        loader = TextLoader(file_key)
+                        loader = TextLoader(newFileName)
                     # Use TextLoader to process text content
                     documents += loader.load()
+                    os.remove(newFileName)
                 except:
                     continue
         text_splitter = RecursiveCharacterTextSplitter(
