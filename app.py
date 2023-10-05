@@ -1213,7 +1213,7 @@ def api_sendVerifyEmail():
         from_email='admin@chatsmith.ai',
         to_emails=email,
         subject='Sign in to ChatSmith',
-        html_content=f'<p style="color: #500050;">Hello<br/><br/>We received a request to sign in to ChatSmith using this email address {email}. If you want to sign in to your ChatSmith account, click this link:<br/><br/><a href="https://app.chatsmith.ai/#/verify/{token}">Sign in to ChatSmith</a><br/><br/>If you did not request this link, you can safely ignore this email.<br/><br/>Thanks.<br/><br/>Your ChatSmith team.</p>'
+        html_content=f'<p style="color: #500050;">Hello<br/><br/>We received a request to sign in to ChatSmith using this email address {email}. If you want to sign in to your ChatSmith account, click this link:<br/><br/><a href="http://localhost:3000/#/verify/{token}">Sign in to ChatSmith</a><br/><br/>If you did not request this link, you can safely ignore this email.<br/><br/>Thanks.<br/><br/>Your ChatSmith team.</p>'
     )
     try:
         sg = SendGridAPIClient(api_key=environ.get('SENDGRID_API_KEY'))
@@ -1234,6 +1234,7 @@ def verify_token(token):
         expired_time = datetime.fromisoformat(decoded['expired_time'])
 
         if expired_time < datetime.utcnow():
+            print('here called')
             return jsonify({'message': 'Expired time out'}), 404
 
         connection = get_connection()
@@ -1249,7 +1250,7 @@ def verify_token(token):
             return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
 
         cursor.execute('INSERT INTO users(email) VALUES (%s) RETURNING *',
-                       (email))
+                       (email,))
         new_created_user = cursor.fetchone()
 
         connection.commit()
@@ -1263,7 +1264,8 @@ def verify_token(token):
         connection.close()
         return jsonify({'token': 'Bearer: '+token, 'email': email}), 200
 
-    except:
+    except Exception as e:
+        print('here called.', str(e))
         return jsonify({'message': 'Email already exist'}), 404
 
 
