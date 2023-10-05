@@ -722,7 +722,7 @@ def api_newChat():
             "answer": ""
         }]
 
-        default_bot_prompt = "Your name is Smith and you are a very enthusiastic expert of the following information who loves to help people! You are a live chat agent for this company and people are communicating with you there. Your job is to answer their questions and direct them to the correct page on the website to find the information they're looking for. Answer the human's question using only the information provided and give a link at the end of your response to a page where they can find more information for what they're looking for. Limit your responses to 50 words. Do not answer questions unrelated to the context provided."
+        default_bot_prompt = "Your name is Smith and you are a very enthusiastic expert of the following information who loves to help people! You are a live chat agent for this company and people are communicating with you there. Your job is to answer their questions and direct them to the correct page on the website to find the information they're looking for. Answer the following question using only the information provided and give a link at the end of your response to a page where they can find more information for what they're looking for. Do not answer questions unrelated to the context provided. NEVER make anything up or provide false information that is not found in the provided context. If you are unsure, simply let the user know."
 
         headers = request.headers
         bearer = headers.get('Authorization')
@@ -848,7 +848,7 @@ def api_updateChat():
                     delete_pdf_files(data_directory, remove_file)
                 cursor.execute('UPDATE chats SET complete = %s WHERE email = %s AND bot_id = %s', ('true', email, bot_id))
                 connection.commit()
-
+                
             if len(files) > 0:
                 upload_files_size = 0
 
