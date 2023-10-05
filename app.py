@@ -1013,12 +1013,15 @@ def api_webhook():
         print("customer_id = ", customer_id)
         start_date = invoice['lines']['data'][0]['period']['start']
         end_date = invoice['lines']['data'][0]['period']['end']
-        amount = invoice['lines']['data'][0]['amount']
+        amount = invoice['lines']['data'][0]['amount_excluding_tax']
 
         payType = 'free'
         period = 'monthly'
         if amount == 100:
             payType = 'trial'
+            period = 'monthly'
+        elif amount == 1:
+            payType = 'hobby'
             period = 'monthly'
         elif amount == 1900:
             payType = 'hobby'
@@ -1053,7 +1056,7 @@ def api_webhook():
     if updated:
         customer_id = updated['customer']
         subscription_id = updated['items']['data'][0]['subscription']
-        amount = updated['items']['data'][0]['plan']['amount']
+        amount = updated['items']['data'][0]['plan']['amount_excluding_tax']
         start_date = updated['current_period_start']
         end_date = updated['current_period_end']
         payType = 'free'
@@ -1063,6 +1066,9 @@ def api_webhook():
             period = 'monthly'
         elif amount == 1900:
             payType = 'hobby'
+            period = 'monthly'
+        elif amount == 2:
+            payType = 'standard'
             period = 'monthly'
         elif amount == 4900:
             payType = 'standard'
