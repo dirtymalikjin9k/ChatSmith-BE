@@ -846,6 +846,9 @@ def api_updateChat():
             if len(remove_files) > 0:
                 for remove_file in remove_files:
                     delete_pdf_files(data_directory, remove_file)
+                cursor.execute('UPDATE chats SET complete = %s WHERE email = %s AND bot_id = %s', ('true', email, bot_id))
+                connection.commit()
+
             if len(files) > 0:
                 upload_files_size = 0
 
