@@ -51,7 +51,7 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 app = Flask(__name__, static_folder='build')
 app.config['CACHE_TYPE'] = "null"
-socketio = SocketIO(app=app, cors_allowed_origins="*")
+socketio = SocketIO(app=app, cors_allowed_origins="*"
         , async_mode='gevent')
 
 socketio.init_app(app, cors_allowed_origins="*")
