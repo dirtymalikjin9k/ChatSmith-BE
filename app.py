@@ -1056,7 +1056,7 @@ def api_webhook():
     if updated:
         customer_id = updated['customer']
         subscription_id = updated['items']['data'][0]['subscription']
-        amount = updated['items']['data'][0]['plan']['amount_excluding_tax']
+        amount = updated['items']['data'][0]['plan']['amount']
         start_date = updated['current_period_start']
         end_date = updated['current_period_end']
         payType = 'free'
