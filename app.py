@@ -1042,7 +1042,14 @@ def api_webhook():
             payType = 'pro'
             period = 'annually'
 
-        print('payType: ', payType, amount)
+        cursor.execute('select subscription_id from subscription where customer_id = %s', (customer_id,))
+        subscription = cursor.fetchone()
+        if subscription is not None:
+            try:
+                stripe.Subscription.cancel(subscription['subscription_id'])
+            except Exception as e:
+                print('cancel old subscription error:', e)
+
         cursor.execute('select * from plans where type = %s', (payType,))
         detail = cursor.fetchone()
         if payType == 'trial':
