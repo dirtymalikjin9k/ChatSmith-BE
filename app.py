@@ -1047,8 +1047,8 @@ def api_webhook():
         if subscription is not None:
             try:
                 stripe.Subscription.cancel(subscription['subscription_id'])
-            except Exception as e:
-                print('cancel old subscription error:', e)
+            except:
+                a = 2
 
         cursor.execute('select * from plans where type = %s', (payType,))
         detail = cursor.fetchone()
