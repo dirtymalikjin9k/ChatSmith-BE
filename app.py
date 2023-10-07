@@ -990,8 +990,8 @@ def api_webhook():
         invoice = event['data']['object']
         print("invoice = ", invoice)
     # ... handle other event types
-    elif event['type'] == 'customer.subscription.updated':
-    # elif event['type'] == 'invoice.updated':
+    # elif event['type'] == 'customer.subscription.updated':
+    elif event['type'] == 'invoice.updated':
         updated = event['data']['object']
         print('updated:', updated)
     elif event['type'] == 'customer.subscription.deleted':
@@ -1060,48 +1060,48 @@ def api_webhook():
         cursor.execute('update subscription set customer_id = %s, subscription_id = %s, start_date = %s, end_date = %s, type = %s, message_left = %s, period = %s where email = %s',
                        (customer_id, subscription_id, start_date, end_date, payType, messageCount, period, email))
 
-    if updated:
-        customer_id = updated['customer']
-        subscription_id = updated['items']['data'][0]['subscription']
-        amount = updated['plan']['amount']
-        start_date = updated['current_period_start']
-        end_date = updated['current_period_end']
-        payType = 'free'
-        period = 'monthly'
-        if amount == 100:
-            payType = 'standard'
-            period = 'monthly'
-        elif amount == 1900:
-            payType = 'hobby'
-            period = 'monthly'
-        elif amount == 1:
-            payType = 'hobby'
-            period = 'monthly'
-        elif amount == 4900:
-            payType = 'standard'
-            period = 'monthly'
-        elif amount == 9900:
-            payType = 'pro'
-            period = 'monthly'
-        elif amount == 19000:
-            payType = 'hobby'
-            period = 'annually'
-        elif amount == 49000:
-            payType = 'standard'
-            period = 'annually'
-        elif amount == 99000:
-            payType = 'pro'
-            period = 'annually'
+    # if updated:
+    #     customer_id = updated['customer']
+    #     subscription_id = updated['items']['data'][0]['subscription']
+    #     amount = updated['plan']['amount']
+    #     start_date = updated['current_period_start']
+    #     end_date = updated['current_period_end']
+    #     payType = 'free'
+    #     period = 'monthly'
+    #     if amount == 100:
+    #         payType = 'standard'
+    #         period = 'monthly'
+    #     elif amount == 1900:
+    #         payType = 'hobby'
+    #         period = 'monthly'
+    #     elif amount == 1:
+    #         payType = 'hobby'
+    #         period = 'monthly'
+    #     elif amount == 4900:
+    #         payType = 'standard'
+    #         period = 'monthly'
+    #     elif amount == 9900:
+    #         payType = 'pro'
+    #         period = 'monthly'
+    #     elif amount == 19000:
+    #         payType = 'hobby'
+    #         period = 'annually'
+    #     elif amount == 49000:
+    #         payType = 'standard'
+    #         period = 'annually'
+    #     elif amount == 99000:
+    #         payType = 'pro'
+    #         period = 'annually'
 
-        cursor.execute('select * from plans where type = %s', (payType,))
-        detail = cursor.fetchone()
-        if payType == 'trial':
-            messageCount = 20
-        else:
-            messageCount = detail['detail']['monthMessage']
+    #     cursor.execute('select * from plans where type = %s', (payType,))
+    #     detail = cursor.fetchone()
+    #     if payType == 'trial':
+    #         messageCount = 20
+    #     else:
+    #         messageCount = detail['detail']['monthMessage']
 
-        cursor.execute('update subscription set subscription_id = %s, start_date = %s, end_date = %s, type = %s, message_left = %s, period = %s where customer_id = %s',
-                       (subscription_id, start_date, end_date, payType, messageCount, period, customer_id))
+    #     cursor.execute('update subscription set subscription_id = %s, start_date = %s, end_date = %s, type = %s, message_left = %s, period = %s where customer_id = %s',
+    #                    (subscription_id, start_date, end_date, payType, messageCount, period, customer_id))
 
     connection.commit()
     cursor.close()
