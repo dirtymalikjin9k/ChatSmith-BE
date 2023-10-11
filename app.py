@@ -804,6 +804,8 @@ def api_updateChat():
     bot_id = request.form.get('bot_id')
     urls_input = request.form.get('urls_input')
     bot_prompt = request.form.get('prompt')
+    welcome = request.form.get('welcome')
+    print('wel:', welcome)
     bot_color = request.form.get('bot_color')
     custom_text = request.form.get('custom_text')
     remove_files = request.form.getlist('remove_files')
@@ -918,8 +920,8 @@ def api_updateChat():
                            (email, bot_id))
             connection.commit()
 
-            cursor.execute("UPDATE chats SET instance_name = %s, bot_prompt = %s, custom_text = %s, complete = %s WHERE email = %s AND bot_id = %s",
-                           (instance_name, bot_prompt, custom_text, 'true', email, bot_id))
+            cursor.execute("UPDATE chats SET instance_name = %s, bot_prompt = %s, custom_text = %s, complete = %s, welcome_message = %s WHERE email = %s AND bot_id = %s",
+                           (instance_name, bot_prompt, custom_text, 'true', welcome, email, bot_id))
             connection.commit()
             cursor.close()
             connection.close()
@@ -949,7 +951,7 @@ def api_getChatInfos():
 
         try:
             cursor.execute(
-                "SELECT id, email, instance_name, custom_text, bot_id, chats, complete, created, urls, bot_name, bot_prompt, pdf_file, encode(bot_avatar, 'base64') AS avatar FROM chats WHERE email = %s ", (email,))  # bot_avatar, pdf_file is missing.
+                "SELECT id, email, welcome_message, instance_name, custom_text, bot_id, chats, complete, created, urls, bot_name, bot_prompt, pdf_file, encode(bot_avatar, 'base64') AS avatar FROM chats WHERE email = %s ", (email,))  # bot_avatar, pdf_file is missing.
             chats = cursor.fetchall()
             connection.commit()
             cursor.close()
@@ -1430,7 +1432,7 @@ def getEmbedChatBotInfo():
         if chat is None:
             return jsonify({'message': 'Chat does not exist'}), 404
 
-        return jsonify({'botName': chat['instance_name'], 'botId': chat['bot_id'], 'avatar': chat['avatar'], 'color': chat['pdf_file']}), 200
+        return jsonify({'botName': chat['instance_name'], 'botId': chat['bot_id'], 'avatar': chat['avatar'], 'color': chat['pdf_file'], 'plan': subscription['type']}), 200
 
     except Exception as e:
         print("get embed chat bot info error:", str(e))
