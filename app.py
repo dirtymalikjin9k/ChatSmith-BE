@@ -846,6 +846,20 @@ def api_updateChat():
         delete_data_collection(email, bot_id)
         connection = get_connection()
         cursor = connection.cursor(cursor_factory=extras.RealDictCursor)
+
+        cursor.execute('select bot_name from chats where email = %s and bot_id = %s', (email, bot_id))
+        bot = cursor.fetchone()
+        botname = bot['bot_name']
+        cursor.execute('select chat_id from bot_id_history where bot_name = %s', (botname,))
+        chatId = cursor.fetchone()
+
+        if chatId is None:
+            cursor.execute('insert into bot_id_history(bot_name, chat_id) values (%s, %s)', (botname, '0',))
+            connection.commit()
+        else:
+            cursor.execute('update bot_id_history set chat_id = %s where bot_name = %s', (f"{int(chatId['chat_id']) + 1}", botname))
+            connection.commit()
+
         cursor.execute('UPDATE chats SET complete = %s WHERE email = %s AND bot_id = %s', ('false', email, bot_id))
         connection.commit()
 
